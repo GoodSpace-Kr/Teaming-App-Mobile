@@ -1,33 +1,40 @@
 import { Stack } from 'expo-router';
 
-export default function ProfileLayout() {
+export default function ChatsLayout() {
   return (
     <Stack>
       <Stack.Screen
         name="index"
         options={{
-          title: '마이페이지',
+          title: '채팅방',
           headerShown: false,
         }}
       />
       <Stack.Screen
-        name="account-info"
+        name="chat-room/[id]"
         options={{
-          title: '계정 정보',
+          title: '티밍 톡',
+          headerShown: false,
+        }}
+      />
+      <Stack.Screen
+        name="create-task"
+        options={{
+          title: '과제 생성하기',
           presentation: 'modal',
         }}
       />
       <Stack.Screen
-        name="change-password"
+        name="data-room/[id]"
         options={{
-          title: '비밀번호 변경',
+          title: '자료실',
           presentation: 'modal',
         }}
       />
       <Stack.Screen
-        name="notification-settings"
+        name="chat-menu"
         options={{
-          title: '알림 설정',
+          title: '톡 상단메뉴',
           presentation: 'modal',
         }}
       />
