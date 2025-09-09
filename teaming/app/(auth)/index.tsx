@@ -66,7 +66,7 @@ export default function LoginScreen() {
           <View style={styles.statCard}>
             <View style={styles.statIcon}>
               <Image
-                source={require('../../assets/images/(beforeLogin)/image 7.png')}
+                source={require('../../assets/images/(beforeLogin)/image 15.png')}
                 style={styles.statIconImage}
               />
             </View>
@@ -77,7 +77,7 @@ export default function LoginScreen() {
           <View style={styles.statCard}>
             <View style={styles.statIcon}>
               <Image
-                source={require('../../assets/images/(beforeLogin)/image 8.png')}
+                source={require('../../assets/images/(beforeLogin)/image 19.png')}
                 style={styles.statIconImage}
               />
             </View>
@@ -90,7 +90,11 @@ export default function LoginScreen() {
         <View style={styles.reviewsSection}>
           <Text style={styles.reviewsTitle}>함께한 사람들의 목소리</Text>
 
-          <View style={styles.reviewsContainer}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.reviewsScrollContainer}
+          >
             <View style={styles.reviewCard}>
               <View style={styles.reviewHeader}>
                 <Text style={styles.reviewIcon}>😊</Text>
@@ -119,7 +123,7 @@ export default function LoginScreen() {
                 과제할때, 결과물을 공유 사람들의 강제성을 어떻게
               </Text>
             </View>
-          </View>
+          </ScrollView>
         </View>
 
         {/* 로그인/회원가입 버튼 */}
@@ -130,6 +134,7 @@ export default function LoginScreen() {
           >
             <Text style={styles.loginButtonText}>로그인</Text>
           </TouchableOpacity>
+          <Text style={styles.divider}>/</Text>
           <TouchableOpacity
             style={styles.registerButton}
             onPress={() => router.push('/(auth)/register')}
@@ -160,6 +165,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 40,
     paddingTop: 20,
+    zIndex: 10,
   },
   logo: {
     width: 40,
@@ -209,7 +215,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     height: height * 0.6,
-    zIndex: 1,
+    zIndex: 0,
   },
   waveImage: {
     width: '100%',
@@ -222,31 +228,27 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     marginBottom: 50,
     marginTop: 20,
-    zIndex: 2,
-    paddingHorizontal: 10,
+    zIndex: 1,
+    paddingHorizontal: 1,
+    justifyContent: 'space-between',
   },
   statCard: {
-    flex: 1,
+    width: '32.5%',
     backgroundColor: 'rgba(255, 255, 255, 0.08)',
     borderRadius: 16,
-    padding: 10,
-    marginHorizontal: 2,
-    alignItems: 'flex-start',
+    padding: 20,
+    marginHorizontal: 0,
+    alignItems: 'center',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.1)',
+    minHeight: 150,
   },
   statIcon: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    justifyContent: 'center',
-    alignItems: 'center',
     marginBottom: 16,
   },
   statIconImage: {
-    width: 30,
-    height: 30,
+    width: 50,
+    height: 50,
   },
   statNumber: {
     fontSize: 20,
@@ -273,8 +275,8 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     textAlign: 'left',
   },
-  reviewsContainer: {
-    gap: 20,
+  reviewsScrollContainer: {
+    paddingRight: 20,
   },
   reviewCard: {
     backgroundColor: 'rgba(255, 255, 255, 0.08)',
@@ -282,6 +284,8 @@ const styles = StyleSheet.create({
     padding: 20,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.1)',
+    width: width * 0.8,
+    marginRight: 16,
   },
   reviewHeader: {
     flexDirection: 'row',
@@ -318,23 +322,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 20,
     zIndex: 2,
-    gap: 20,
   },
   loginButton: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    paddingHorizontal: 30,
-    paddingVertical: 16,
-    borderRadius: 25,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
+    paddingHorizontal: 0,
+    paddingVertical: 8,
   },
   loginButtonText: {
     fontSize: 18,
@@ -342,21 +333,15 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     textAlign: 'center',
   },
+  divider: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    marginHorizontal: 8,
+  },
   registerButton: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    paddingHorizontal: 30,
-    paddingVertical: 16,
-    borderRadius: 25,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
+    paddingHorizontal: 0,
+    paddingVertical: 8,
   },
   registerButtonText: {
     fontSize: 18,
