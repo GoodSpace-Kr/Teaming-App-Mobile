@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Animated } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import { router } from 'expo-router';
 import TeamAvatars from '../../src/components/TeamAvatars';
 
 export default function SplashScreen() {
@@ -43,9 +43,15 @@ export default function SplashScreen() {
     mainAnimation.start();
     pulseAnimation.start();
 
+    // 3초 후 로그인 전 화면으로 이동
+    const timer = setTimeout(() => {
+      router.replace('/(auth)');
+    }, 3000);
+
     return () => {
       mainAnimation.stop();
       pulseAnimation.stop();
+      clearTimeout(timer);
     };
   }, []);
 
@@ -61,14 +67,6 @@ export default function SplashScreen() {
 
   return (
     <View style={styles.container}>
-      {/* 배경 */}
-      <LinearGradient
-        colors={['#000000', '#050D1F']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={StyleSheet.absoluteFillObject}
-      />
-
       {/* 메인 콘텐츠 */}
       <View style={styles.content}>
         {/* 팀 아바타 모티브 */}

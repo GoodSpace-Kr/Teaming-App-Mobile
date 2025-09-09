@@ -6,31 +6,27 @@ import {
   Image,
   TouchableOpacity,
   ScrollView,
+  Dimensions,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
+import { router } from 'expo-router';
+
+const { width, height } = Dimensions.get('window');
 
 export default function LoginScreen() {
-  const handleSocialLogin = (provider: string) => {
-    console.log(`${provider} 로그인 시도`);
-    // TODO: 실제 소셜 로그인 구현
+  const handleLoginPress = () => {
+    router.push('/(auth)/login');
   };
 
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
 
-      {/* 배경 그라데이션 */}
-      <LinearGradient
-        colors={['#000000', '#1a1a2e', '#16213e']}
-        style={StyleSheet.absoluteFillObject}
-      />
-
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* 상단 로고 섹션 */}
         <View style={styles.logoSection}>
           <Image
-            source={require('../../assets/images/logo.png')}
+            source={require('../../assets/images/(beforeLogin)/Icon.png')}
             style={styles.logo}
           />
           <Text style={styles.appName}>Teaming</Text>
@@ -45,19 +41,34 @@ export default function LoginScreen() {
           </Text>
         </View>
 
+        {/* 배경 웨이브 이미지 */}
+        <View style={styles.waveContainer}>
+          <Image
+            source={require('../../assets/images/(beforeLogin)/wave.png')}
+            style={styles.waveImage}
+            resizeMode="cover"
+          />
+        </View>
+
         {/* 통계 섹션 */}
         <View style={styles.statsSection}>
           <View style={styles.statCard}>
             <View style={styles.statIcon}>
-              <Text style={styles.statIconText}>👥</Text>
+              <Image
+                source={require('../../assets/images/(beforeLogin)/image 6.png')}
+                style={styles.statIconImage}
+              />
             </View>
-            <Text style={styles.statNumber}>100 팀</Text>
+            <Text style={styles.statNumber}>100팀</Text>
             <Text style={styles.statLabel}>만들어진 팀</Text>
           </View>
 
           <View style={styles.statCard}>
             <View style={styles.statIcon}>
-              <Text style={styles.statIconText}>👤</Text>
+              <Image
+                source={require('../../assets/images/(beforeLogin)/image 15.png')}
+                style={styles.statIconImage}
+              />
             </View>
             <Text style={styles.statNumber}>999명</Text>
             <Text style={styles.statLabel}>가입한 이용자</Text>
@@ -65,7 +76,10 @@ export default function LoginScreen() {
 
           <View style={styles.statCard}>
             <View style={styles.statIcon}>
-              <Text style={styles.statIconText}>🎯</Text>
+              <Image
+                source={require('../../assets/images/(beforeLogin)/image 19.png')}
+                style={styles.statIconImage}
+              />
             </View>
             <Text style={styles.statNumber}>2팀</Text>
             <Text style={styles.statLabel}>완수한 팀</Text>
@@ -76,7 +90,11 @@ export default function LoginScreen() {
         <View style={styles.reviewsSection}>
           <Text style={styles.reviewsTitle}>함께한 사람들의 목소리</Text>
 
-          <View style={styles.reviewsContainer}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.reviewsScrollContainer}
+          >
             <View style={styles.reviewCard}>
               <View style={styles.reviewHeader}>
                 <Text style={styles.reviewIcon}>😊</Text>
@@ -105,49 +123,23 @@ export default function LoginScreen() {
                 과제할때, 결과물을 공유 사람들의 강제성을 어떻게
               </Text>
             </View>
-          </View>
+          </ScrollView>
         </View>
 
-        {/* 소셜 로그인 버튼 섹션 */}
-        <View style={styles.socialLoginSection}>
+        {/* 로그인/회원가입 버튼 */}
+        <View style={styles.loginButtonSection}>
           <TouchableOpacity
-            style={[styles.socialButton, styles.kakaoButton]}
-            onPress={() => handleSocialLogin('kakao')}
+            style={styles.loginButton}
+            onPress={() => router.push('/(auth)/login')}
           >
-            <Image
-              source={require('../../assets/images/(social)/Kakao.png')}
-              style={styles.socialIcon}
-            />
+            <Text style={styles.loginButtonText}>로그인</Text>
           </TouchableOpacity>
-
+          <Text style={styles.divider}>/</Text>
           <TouchableOpacity
-            style={[styles.socialButton, styles.appleButton]}
-            onPress={() => handleSocialLogin('apple')}
+            style={styles.registerButton}
+            onPress={() => router.push('/(auth)/register')}
           >
-            <Image
-              source={require('../../assets/images/(social)/Apple.png')}
-              style={styles.socialIcon}
-            />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.socialButton, styles.googleButton]}
-            onPress={() => handleSocialLogin('google')}
-          >
-            <Image
-              source={require('../../assets/images/(social)/Google.png')}
-              style={styles.socialIcon}
-            />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.socialButton, styles.naverButton]}
-            onPress={() => handleSocialLogin('naver')}
-          >
-            <Image
-              source={require('../../assets/images/(social)/Naver.png')}
-              style={styles.socialIcon}
-            />
+            <Text style={styles.registerButtonText}>회원가입</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -169,13 +161,16 @@ const styles = StyleSheet.create({
 
   // 로고 섹션
   logoSection: {
+    flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 40,
+    paddingTop: 20,
+    zIndex: 10,
   },
   logo: {
-    width: 60,
-    height: 60,
-    marginBottom: 10,
+    width: 40,
+    height: 40,
+    marginRight: 12,
   },
   appName: {
     fontSize: 24,
@@ -186,19 +181,23 @@ const styles = StyleSheet.create({
   // 헤더 섹션
   headerSection: {
     alignItems: 'center',
-    marginBottom: 50,
+    marginBottom: 30,
+    position: 'relative',
+    zIndex: 2,
   },
   mainTitle: {
-    fontSize: 36,
-    fontWeight: 'bold',
+    fontSize: 48,
+    fontWeight: '900',
     color: '#FFFFFF',
-    marginBottom: 10,
+    marginBottom: 8,
+    textAlign: 'center',
   },
   subtitle: {
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: '600',
     color: '#FFFFFF',
-    marginBottom: 15,
+    marginBottom: 20,
+    textAlign: 'center',
   },
   description: {
     fontSize: 16,
@@ -206,120 +205,148 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 24,
     opacity: 0.9,
+    paddingHorizontal: 20,
+  },
+
+  // 웨이브 배경
+  waveContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: height * 0.6,
+    zIndex: 0,
+  },
+  waveImage: {
+    width: '100%',
+    height: '100%',
+    opacity: 1,
   },
 
   // 통계 섹션
   statsSection: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     marginBottom: 50,
+    marginTop: 20,
+    zIndex: 1,
+    paddingHorizontal: 1,
+    justifyContent: 'space-between',
   },
   statCard: {
-    flex: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 12,
-    padding: 16,
-    marginHorizontal: 4,
+    width: '32.5%',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: 16,
+    padding: 20,
+    marginHorizontal: 0,
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    minHeight: 150,
   },
   statIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(59, 130, 246, 0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 16,
   },
-  statIconText: {
-    fontSize: 20,
+  statIconImage: {
+    width: 50,
+    height: 50,
   },
   statNumber: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 'bold',
     color: '#FFFFFF',
-    marginBottom: 4,
+    marginBottom: 6,
   },
   statLabel: {
     fontSize: 12,
     color: '#CCCCCC',
     textAlign: 'center',
+    lineHeight: 16,
   },
 
   // 후기 섹션
   reviewsSection: {
     marginBottom: 50,
+    zIndex: 2,
   },
   reviewsTitle: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: 'bold',
-    color: '#FFFFFF',
-    marginBottom: 20,
-    textAlign: 'center',
+    color: '#4A90E2',
+    marginBottom: 24,
+    textAlign: 'left',
   },
-  reviewsContainer: {
-    gap: 16,
+  reviewsScrollContainer: {
+    paddingRight: 20,
   },
   reviewCard: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 12,
-    padding: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: 16,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    width: width * 0.8,
+    marginRight: 16,
   },
   reviewHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 16,
   },
   reviewIcon: {
-    fontSize: 24,
-    marginRight: 12,
+    fontSize: 28,
+    marginRight: 16,
   },
   reviewUserInfo: {
     flex: 1,
   },
   reviewUserName: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: 'bold',
     color: '#FFFFFF',
     marginBottom: 4,
   },
   reviewUserSchool: {
-    fontSize: 12,
+    fontSize: 14,
     color: '#CCCCCC',
   },
   reviewText: {
-    fontSize: 14,
+    fontSize: 15,
     color: '#CCCCCC',
-    lineHeight: 20,
+    lineHeight: 22,
   },
 
-  // 소셜 로그인 섹션
-  socialLoginSection: {
+  // 로그인 버튼 섹션
+  loginButtonSection: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-  },
-  socialButton: {
-    width: 60,
-    height: 60,
-    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
+    marginTop: 20,
+    zIndex: 2,
   },
-  kakaoButton: {
-    backgroundColor: '#FEE500',
+  loginButton: {
+    paddingHorizontal: 0,
+    paddingVertical: 8,
   },
-  appleButton: {
-    backgroundColor: '#000000',
+  loginButtonText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    textAlign: 'center',
   },
-  googleButton: {
-    backgroundColor: '#EA4335',
+  divider: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    marginHorizontal: 8,
   },
-  naverButton: {
-    backgroundColor: '#03C75A',
+  registerButton: {
+    paddingHorizontal: 0,
+    paddingVertical: 8,
   },
-  socialIcon: {
-    width: 32,
-    height: 32,
+  registerButtonText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    textAlign: 'center',
   },
 });
