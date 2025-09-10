@@ -55,7 +55,7 @@ export default function LoginScreen() {
           <View style={styles.statCard}>
             <View style={styles.statIcon}>
               <Image
-                source={require('../../assets/images/(beforeLogin)/image 6.png')}
+                source={require('../../assets/images/(beforeLogin)/bluePeople.png')}
                 style={styles.statIconImage}
               />
             </View>
