@@ -13,7 +13,7 @@ export default function HomeLayout() {
       <Stack.Screen
         name="create-team"
         options={{
-          title: '팀플 만들기',
+          headerShown: false,
           presentation: 'modal',
         }}
       />
