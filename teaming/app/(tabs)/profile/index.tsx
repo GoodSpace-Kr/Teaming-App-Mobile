@@ -27,10 +27,6 @@ export default function MyPageScreen() {
     console.log('버전정보');
   };
 
-  const handleCustomerCenter = () => {
-    console.log('고객센터');
-  };
-
   const handleChangeAccountInfo = () => {
     router.push('/(tabs)/profile/account-info');
   };
@@ -95,7 +91,10 @@ export default function MyPageScreen() {
             <Ionicons name="chevron-forward" size={16} color="#666666" />
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.menuItem} onPress={handleVersionInfo}>
+          <TouchableOpacity
+            style={[styles.menuItem, styles.lastMenuItem]}
+            onPress={handleVersionInfo}
+          >
             <Ionicons
               name="settings"
               size={20}
@@ -107,20 +106,6 @@ export default function MyPageScreen() {
               <Text style={styles.versionText}>v1.0.0</Text>
               <Ionicons name="chevron-forward" size={16} color="#666666" />
             </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.menuItem, styles.lastMenuItem]}
-            onPress={handleCustomerCenter}
-          >
-            <Ionicons
-              name="information-circle"
-              size={20}
-              color="#FFFFFF"
-              style={styles.menuIcon}
-            />
-            <Text style={styles.menuText}>고객센터</Text>
-            <Ionicons name="chevron-forward" size={16} color="#666666" />
           </TouchableOpacity>
         </View>
 
