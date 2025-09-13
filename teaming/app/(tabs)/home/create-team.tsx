@@ -65,7 +65,7 @@ export default function CreateTeamScreen() {
     {
       id: 'standard',
       name: 'Standard Room',
-      price: '4841',
+      price: '4840',
       benefit: '스타벅스 아이스 아메리카노 1개',
       logo: require('../../../assets/images/(makeTeam)/starbucks.png'),
       color: '#FFFFFF',

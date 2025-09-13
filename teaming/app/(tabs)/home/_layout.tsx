@@ -20,7 +20,7 @@ export default function HomeLayout() {
       <Stack.Screen
         name="join-team"
         options={{
-          title: '팀플 참여하기',
+          headerShown: false,
           presentation: 'modal',
         }}
       />
