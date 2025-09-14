@@ -19,8 +19,12 @@ export default function MyPageScreen() {
     router.back();
   };
 
+  const handleTermsOfService = () => {
+    router.push('/(tabs)/profile/terms-privacy?tab=terms');
+  };
+
   const handlePersonalInfo = () => {
-    console.log('개인정보 수집 및 이용');
+    router.push('/(tabs)/profile/terms-privacy?tab=privacy');
   };
 
   const handleVersionInfo = () => {
@@ -76,6 +80,20 @@ export default function MyPageScreen() {
           </View>
           <TouchableOpacity
             style={styles.menuItem}
+            onPress={handleTermsOfService}
+          >
+            <Ionicons
+              name="document-text"
+              size={20}
+              color="#FFFFFF"
+              style={styles.menuIcon}
+            />
+            <Text style={styles.menuText}>이용약관</Text>
+            <Ionicons name="chevron-forward" size={16} color="#666666" />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.menuItem}
             onPress={handlePersonalInfo}
           >
             <View style={styles.menuIconContainer}>
@@ -94,6 +112,7 @@ export default function MyPageScreen() {
           <TouchableOpacity
             style={[styles.menuItem, styles.lastMenuItem]}
             onPress={handleVersionInfo}
+            disabled={true}
           >
             <Ionicons
               name="settings"

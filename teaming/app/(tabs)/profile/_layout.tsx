@@ -31,6 +31,13 @@ export default function ProfileLayout() {
           presentation: 'modal',
         }}
       />
+      <Stack.Screen
+        name="terms-privacy"
+        options={{
+          title: '약관 및 정책',
+          headerShown: false,
+        }}
+      />
     </Stack>
   );
 }
