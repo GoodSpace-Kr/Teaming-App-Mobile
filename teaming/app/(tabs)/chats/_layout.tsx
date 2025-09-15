@@ -21,21 +21,21 @@ export default function ChatsLayout() {
         name="create-task"
         options={{
           title: '과제 생성하기',
-          presentation: 'modal',
+          headerShown: false,
         }}
       />
       <Stack.Screen
         name="data-room/[id]"
         options={{
           title: '자료실',
-          presentation: 'modal',
+          headerShown: false,
         }}
       />
       <Stack.Screen
         name="chat-menu"
         options={{
           title: '톡 상단메뉴',
-          presentation: 'modal',
+          headerShown: false,
         }}
       />
     </Stack>

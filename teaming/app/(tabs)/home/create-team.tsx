@@ -28,7 +28,15 @@ export default function CreateTeamScreen() {
 
   const handleCreateRoom = () => {
     console.log('티밍룸 생성하기 버튼 클릭');
-    // TODO: 채팅방으로 이동 (아직 구현되지 않음)
+    // Modal 닫기
+    router.dismiss();
+    // 약간의 지연 후 채팅방 목록을 거쳐서 채팅방으로 이동 (팀장으로)
+    setTimeout(() => {
+      router.push('/(tabs)/chats');
+      setTimeout(() => {
+        router.push('/(tabs)/chats/chat-room/1?isLeader=true');
+      }, 100);
+    }, 100);
   };
 
   const handleSendInvite = (index: number) => {

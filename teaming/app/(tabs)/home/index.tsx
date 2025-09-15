@@ -58,7 +58,12 @@ export default function HomeScreen() {
   };
 
   const handleEnterTeam = (teamId: number) => {
-    router.push(`/(tabs)/home/team-detail/${teamId}`);
+    // 채팅방 목록을 거쳐서 채팅방으로 이동 (팀원으로)
+    router.push('/(tabs)/chats');
+    // 약간의 지연 후 채팅방으로 이동
+    setTimeout(() => {
+      router.push(`/(tabs)/chats/chat-room/${teamId}?isLeader=false`);
+    }, 100);
   };
 
   return (

@@ -52,7 +52,15 @@ export default function JoinTeamScreen() {
 
   const handleEnter = () => {
     console.log('입장 버튼 클릭');
-    // TODO: 채팅방으로 이동 (아직 구현되지 않음)
+    // Modal 닫기
+    router.dismiss();
+    // 약간의 지연 후 채팅방 목록을 거쳐서 채팅방으로 이동 (팀원으로)
+    setTimeout(() => {
+      router.push('/(tabs)/chats');
+      setTimeout(() => {
+        router.push('/(tabs)/chats/chat-room/1?isLeader=false');
+      }, 100);
+    }, 100);
   };
 
   return (
