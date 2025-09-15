@@ -208,7 +208,6 @@ export default function ChatRoomScreen() {
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>{chatRoomData.title}</Text>
-          <Text style={styles.headerSubtitle}>{chatRoomData.memberCount}</Text>
         </View>
         <TouchableOpacity onPress={handleMenuPress} style={styles.menuButton}>
           <Ionicons name="ellipsis-horizontal" size={24} color="#FFFFFF" />
@@ -289,11 +288,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     color: '#FFFFFF',
-    marginBottom: 2,
-  },
-  headerSubtitle: {
-    fontSize: 12,
-    color: '#CCCCCC',
   },
   menuButton: {
     padding: 8,
