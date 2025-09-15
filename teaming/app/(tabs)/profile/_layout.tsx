@@ -14,14 +14,14 @@ export default function ProfileLayout() {
         name="account-info"
         options={{
           title: '계정 정보',
-          presentation: 'modal',
+          headerShown: false,
         }}
       />
       <Stack.Screen
         name="change-password"
         options={{
           title: '비밀번호 변경',
-          presentation: 'modal',
+          headerShown: false,
         }}
       />
       <Stack.Screen
