@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import LeaveTeamModal from './leave-team-modal';
 
 const { width } = Dimensions.get('window');
 
@@ -23,6 +24,7 @@ interface Participant {
 
 export default function ChatMenuScreen() {
   const { roomId, isLeader } = useLocalSearchParams();
+  const [showLeaveModal, setShowLeaveModal] = useState(false);
 
   // 팀장 여부 확인 (실제로는 API에서 가져올 데이터)
   const isTeamLeader = isLeader === 'true';
@@ -69,12 +71,24 @@ export default function ChatMenuScreen() {
 
   const handleViewTasks = () => {
     // 과제 확인/제출 화면으로 이동
-    console.log('과제 확인/제출');
+    router.push('/(tabs)/chats/submit-task');
   };
 
   const handleLeaveRoom = () => {
-    // 팀밍룸 나가기 - 홈 화면으로 이동
+    // 팀밍룸 나가기 모달 표시
+    setShowLeaveModal(true);
+  };
+
+  const handleConfirmLeave = () => {
+    // 모달 닫기
+    setShowLeaveModal(false);
+    // 홈 화면으로 이동
     router.push('/(tabs)/home');
+  };
+
+  const handleCancelLeave = () => {
+    // 모달 닫기
+    setShowLeaveModal(false);
   };
 
   return (
@@ -159,6 +173,14 @@ export default function ChatMenuScreen() {
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      {/* 티밍룸 나가기 모달 */}
+      <LeaveTeamModal
+        visible={showLeaveModal}
+        onClose={handleCancelLeave}
+        onConfirm={handleConfirmLeave}
+        teamName="정치학 발표"
+      />
     </View>
   );
 }
