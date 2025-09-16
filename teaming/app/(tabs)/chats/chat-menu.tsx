@@ -74,6 +74,11 @@ export default function ChatMenuScreen() {
     router.push('/(tabs)/chats/submit-task');
   };
 
+  const handleViewTaskSubmissions = () => {
+    // 과제 제출 확인 화면으로 이동
+    router.push('/(tabs)/chats/task-submissions');
+  };
+
   const handleLeaveRoom = () => {
     // 팀밍룸 나가기 모달 표시
     setShowLeaveModal(true);
@@ -134,6 +139,19 @@ export default function ChatMenuScreen() {
             </Text>
             <Ionicons name="chevron-forward" size={20} color="#666666" />
           </TouchableOpacity>
+
+          {isTeamLeader && (
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={handleViewTaskSubmissions}
+            >
+              <View style={styles.menuIcon}>
+                <Ionicons name="checkmark-circle" size={24} color="#4CAF50" />
+              </View>
+              <Text style={styles.menuText}>과제 제출 확인</Text>
+              <Ionicons name="chevron-forward" size={20} color="#666666" />
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* 대화상대 섹션 */}
