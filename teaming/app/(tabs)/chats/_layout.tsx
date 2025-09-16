@@ -45,6 +45,13 @@ export default function ChatsLayout() {
           headerShown: false,
         }}
       />
+      <Stack.Screen
+        name="task-submissions"
+        options={{
+          title: '과제 제출 확인',
+          headerShown: false,
+        }}
+      />
     </Stack>
   );
 }
