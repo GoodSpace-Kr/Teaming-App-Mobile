@@ -12,6 +12,7 @@ import { StatusBar } from 'expo-status-bar';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import LeaveTeamModal from './leave-team-modal';
+import CompleteTeamModal from './complete-team-modal';
 
 const { width } = Dimensions.get('window');
 
@@ -25,6 +26,7 @@ interface Participant {
 export default function ChatMenuScreen() {
   const { roomId, isLeader } = useLocalSearchParams();
   const [showLeaveModal, setShowLeaveModal] = useState(false);
+  const [showCompleteModal, setShowCompleteModal] = useState(false);
 
   // 팀장 여부 확인 (실제로는 API에서 가져올 데이터)
   const isTeamLeader = isLeader === 'true';
@@ -94,6 +96,24 @@ export default function ChatMenuScreen() {
   const handleCancelLeave = () => {
     // 모달 닫기
     setShowLeaveModal(false);
+  };
+
+  const handleCompleteTeam = () => {
+    // 팀플 완료 모달 표시
+    setShowCompleteModal(true);
+  };
+
+  const handleConfirmComplete = () => {
+    // 팀플 완료 처리
+    console.log('팀플 완료 처리');
+    setShowCompleteModal(false);
+    // 완료 후 홈 화면으로 이동하거나 다른 처리
+    router.push('/(tabs)/home');
+  };
+
+  const handleCancelComplete = () => {
+    // 모달 닫기
+    setShowCompleteModal(false);
   };
 
   return (
@@ -177,6 +197,22 @@ export default function ChatMenuScreen() {
           ))}
         </View>
 
+        {/* 팀플 완료 (팀장만) */}
+        {isTeamLeader && (
+          <View style={styles.section}>
+            <TouchableOpacity
+              style={styles.completeButton}
+              onPress={handleCompleteTeam}
+            >
+              <View style={styles.completeIcon}>
+                <Ionicons name="trophy" size={24} color="#FFD700" />
+              </View>
+              <Text style={styles.completeText}>팀플 완료</Text>
+              <Ionicons name="chevron-forward" size={20} color="#666666" />
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* 팀밍룸 나가기 */}
         <View style={styles.section}>
           <TouchableOpacity
@@ -197,6 +233,14 @@ export default function ChatMenuScreen() {
         visible={showLeaveModal}
         onClose={handleCancelLeave}
         onConfirm={handleConfirmLeave}
+        teamName="정치학 발표"
+      />
+
+      {/* 팀플 완료 모달 */}
+      <CompleteTeamModal
+        visible={showCompleteModal}
+        onClose={handleCancelComplete}
+        onConfirm={handleConfirmComplete}
         teamName="정치학 발표"
       />
     </View>
@@ -335,6 +379,27 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 16,
     color: '#FF3B30',
+    fontWeight: '500',
+  },
+  completeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  completeIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#1A1A1A',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  completeText: {
+    flex: 1,
+    fontSize: 16,
+    color: '#FFD700',
     fontWeight: '500',
   },
 });

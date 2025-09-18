@@ -8,10 +8,12 @@ import {
   TextInput,
   Image,
   Dimensions,
+  Alert,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 
 const { width } = Dimensions.get('window');
 
@@ -21,6 +23,7 @@ export default function CreateTeamScreen() {
   const [teamCount, setTeamCount] = useState(3);
   const [selectedRoom, setSelectedRoom] = useState('basic');
   const [emails, setEmails] = useState(['', '', '']);
+  const [roomImage, setRoomImage] = useState<string | null>(null);
 
   const handleBackPress = () => {
     router.back();
@@ -47,6 +50,28 @@ export default function CreateTeamScreen() {
     const newEmails = [...emails];
     newEmails[index] = text;
     setEmails(newEmails);
+  };
+
+  const handleSelectRoomImage = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 1,
+        allowsMultipleSelection: false, // 한 장만 선택 가능
+      });
+
+      if (!result.canceled && result.assets.length > 0) {
+        setRoomImage(result.assets[0].uri);
+      }
+    } catch (error) {
+      Alert.alert('오류', '이미지를 선택하는 중 오류가 발생했습니다.');
+    }
+  };
+
+  const handleRemoveRoomImage = () => {
+    setRoomImage(null);
   };
 
   // 팀원수에 맞춰 이메일 배열 조정
@@ -112,6 +137,37 @@ export default function CreateTeamScreen() {
             placeholder="팀플 제목을 입력해주세요"
             placeholderTextColor="#666666"
           />
+        </View>
+
+        {/* 채팅방 이미지 */}
+        <View style={styles.inputSection}>
+          <Text style={styles.inputLabel}>채팅방 이미지</Text>
+          <TouchableOpacity
+            style={styles.imageContainer}
+            onPress={handleSelectRoomImage}
+          >
+            {roomImage ? (
+              <Image source={{ uri: roomImage }} style={styles.roomImage} />
+            ) : (
+              <View style={styles.imagePlaceholder}>
+                <Ionicons name="camera" size={32} color="#666666" />
+                <Text style={styles.placeholderText}>이미지 선택</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+          {roomImage && (
+            <TouchableOpacity
+              style={styles.removeImageButton}
+              onPress={handleRemoveRoomImage}
+            >
+              <Text style={styles.removeImageText}>이미지 제거</Text>
+            </TouchableOpacity>
+          )}
+          {!roomImage && (
+            <Text style={styles.imageInfoText}>
+              💡 이미지를 선택하지 않을 시 기본 이미지로 생성됩니다.
+            </Text>
+          )}
         </View>
 
         {/* 부제목 및 한줄소개 */}
@@ -484,5 +540,53 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     color: '#FFFFFF',
+  },
+  imageContainer: {
+    width: 120,
+    height: 120,
+    borderRadius: 12,
+    backgroundColor: '#121216',
+    borderWidth: 1,
+    borderColor: '#292929',
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'center',
+    position: 'relative',
+  },
+  roomImage: {
+    width: 120,
+    height: 120,
+    borderRadius: 12,
+  },
+  imagePlaceholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  placeholderText: {
+    fontSize: 12,
+    color: '#666666',
+    marginTop: 8,
+  },
+  removeImageButton: {
+    alignSelf: 'center',
+    marginTop: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: '#1A1A1A',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#292929',
+  },
+  removeImageText: {
+    fontSize: 14,
+    color: '#FF3B30',
+    fontWeight: '500',
+  },
+  imageInfoText: {
+    fontSize: 12,
+    color: '#888888',
+    textAlign: 'center',
+    marginTop: 12,
+    lineHeight: 16,
   },
 });
