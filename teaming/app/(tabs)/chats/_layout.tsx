@@ -39,9 +39,23 @@ export default function ChatsLayout() {
         }}
       />
       <Stack.Screen
+        name="task-list"
+        options={{
+          title: '과제 목록',
+          headerShown: false,
+        }}
+      />
+      <Stack.Screen
+        name="view-task"
+        options={{
+          title: '과제 확인',
+          headerShown: false,
+        }}
+      />
+      <Stack.Screen
         name="submit-task"
         options={{
-          title: '과제 확인/제출',
+          title: '과제 제출',
           headerShown: false,
         }}
       />

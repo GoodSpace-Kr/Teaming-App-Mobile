@@ -113,27 +113,19 @@ export default function SubmitTaskScreen() {
         <TouchableOpacity onPress={handleBackPress} style={styles.backButton}>
           <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>과제 확인/제출</Text>
+        <Text style={styles.headerTitle}>과제 제출</Text>
         <View style={styles.headerRight} />
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* 과제 정보 */}
+        {/* 과제 요약 */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>과제 정보</Text>
-          <View style={styles.taskInfoCard}>
+          <View style={styles.taskSummaryCard}>
             <Text style={styles.taskTitle}>{taskInfo.title}</Text>
-            <Text style={styles.taskDescription}>{taskInfo.description}</Text>
             <View style={styles.taskMeta}>
               <View style={styles.metaItem}>
                 <Ionicons name="calendar" size={16} color="#007AFF" />
                 <Text style={styles.metaText}>마감: {taskInfo.deadline}</Text>
-              </View>
-              <View style={styles.metaItem}>
-                <Ionicons name="people" size={16} color="#007AFF" />
-                <Text style={styles.metaText}>
-                  담당자: {taskInfo.assignedMembers.join(', ')}
-                </Text>
               </View>
               <View style={styles.metaItem}>
                 <Ionicons name="time" size={16} color="#FF9500" />
@@ -251,6 +243,13 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   taskInfoCard: {
+    backgroundColor: '#121216',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#292929',
+  },
+  taskSummaryCard: {
     backgroundColor: '#121216',
     borderRadius: 12,
     padding: 16,

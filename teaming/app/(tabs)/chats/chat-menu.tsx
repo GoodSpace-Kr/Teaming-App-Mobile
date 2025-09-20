@@ -72,13 +72,13 @@ export default function ChatMenuScreen() {
   };
 
   const handleViewTasks = () => {
-    // 과제 확인/제출 화면으로 이동
-    router.push('/(tabs)/chats/submit-task');
+    // 과제 목록 화면으로 이동
+    router.push('/(tabs)/chats/task-list');
   };
 
-  const handleViewTaskSubmissions = () => {
-    // 과제 제출 확인 화면으로 이동
-    router.push('/(tabs)/chats/task-submissions');
+  const handleSubmitTasks = () => {
+    // 과제 제출 화면으로 이동
+    router.push('/(tabs)/chats/submit-task');
   };
 
   const handleLeaveRoom = () => {
@@ -147,28 +147,49 @@ export default function ChatMenuScreen() {
             <Ionicons name="chevron-forward" size={20} color="#666666" />
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.menuItem}
-            onPress={isTeamLeader ? handleCreateTask : handleViewTasks}
-          >
-            <View style={styles.menuIcon}>
-              <Ionicons name="document-text" size={24} color="#007AFF" />
-            </View>
-            <Text style={styles.menuText}>
-              {isTeamLeader ? '과제 생성하기' : '과제 확인/제출'}
-            </Text>
-            <Ionicons name="chevron-forward" size={20} color="#666666" />
-          </TouchableOpacity>
-
-          {isTeamLeader && (
+          {isTeamLeader ? (
             <TouchableOpacity
               style={styles.menuItem}
-              onPress={handleViewTaskSubmissions}
+              onPress={handleCreateTask}
             >
               <View style={styles.menuIcon}>
-                <Ionicons name="checkmark-circle" size={24} color="#4CAF50" />
+                <Ionicons name="add-circle" size={24} color="#007AFF" />
               </View>
-              <Text style={styles.menuText}>과제 제출 확인</Text>
+              <Text style={styles.menuText}>과제 생성하기</Text>
+              <Ionicons name="chevron-forward" size={20} color="#666666" />
+            </TouchableOpacity>
+          ) : (
+            <>
+              <TouchableOpacity
+                style={styles.menuItem}
+                onPress={handleViewTasks}
+              >
+                <View style={styles.menuIcon}>
+                  <Ionicons name="document-text" size={24} color="#007AFF" />
+                </View>
+                <Text style={styles.menuText}>과제방</Text>
+                <Ionicons name="chevron-forward" size={20} color="#666666" />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.menuItem}
+                onPress={handleSubmitTasks}
+              >
+                <View style={styles.menuIcon}>
+                  <Ionicons name="send" size={24} color="#4CAF50" />
+                </View>
+                <Text style={styles.menuText}>과제 제출</Text>
+                <Ionicons name="chevron-forward" size={20} color="#666666" />
+              </TouchableOpacity>
+            </>
+          )}
+
+          {isTeamLeader && (
+            <TouchableOpacity style={styles.menuItem} onPress={handleViewTasks}>
+              <View style={styles.menuIcon}>
+                <Ionicons name="document-text" size={24} color="#007AFF" />
+              </View>
+              <Text style={styles.menuText}>과제방</Text>
               <Ionicons name="chevron-forward" size={20} color="#666666" />
             </TouchableOpacity>
           )}
