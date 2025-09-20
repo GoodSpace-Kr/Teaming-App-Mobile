@@ -10,10 +10,14 @@ import {
   Dimensions,
   KeyboardAvoidingView,
   Platform,
+  Modal,
+  Alert,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
 import ChatBubble from '@/src/components/ChatBubble';
 
 const { width, height } = Dimensions.get('window');
@@ -40,6 +44,7 @@ export default function ChatRoomScreen() {
   const { id, isLeader } = useLocalSearchParams();
   const [inputText, setInputText] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
+  const [showFileMenu, setShowFileMenu] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
 
   // 목데이터 - 실제로는 API에서 가져올 데이터
@@ -156,6 +161,81 @@ export default function ChatRoomScreen() {
     }
   };
 
+  const handleImagePicker = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        const asset = result.assets[0];
+        Alert.alert(
+          '이미지 선택됨',
+          `파일명: ${asset.fileName || '이미지'}\n크기: ${Math.round(
+            (asset.fileSize || 0) / 1024
+          )}KB`,
+          [{ text: '확인' }]
+        );
+        setShowFileMenu(false);
+        // TODO: 실제로는 이미지를 메시지로 전송하고 자료실에 추가
+      }
+    } catch (error) {
+      Alert.alert('오류', '이미지를 선택하는 중 오류가 발생했습니다.');
+    }
+  };
+
+  const handleVideoPicker = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+        allowsEditing: true,
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        const asset = result.assets[0];
+        Alert.alert(
+          '동영상 선택됨',
+          `파일명: ${asset.fileName || '동영상'}\n크기: ${Math.round(
+            (asset.fileSize || 0) / 1024
+          )}KB`,
+          [{ text: '확인' }]
+        );
+        setShowFileMenu(false);
+        // TODO: 실제로는 동영상을 메시지로 전송하고 자료실에 추가
+      }
+    } catch (error) {
+      Alert.alert('오류', '동영상을 선택하는 중 오류가 발생했습니다.');
+    }
+  };
+
+  const handleDocumentPicker = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: '*/*',
+        copyToCacheDirectory: true,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        const asset = result.assets[0];
+        Alert.alert(
+          '파일 선택됨',
+          `파일명: ${asset.name}\n크기: ${Math.round(
+            (asset.size || 0) / 1024
+          )}KB`,
+          [{ text: '확인' }]
+        );
+        setShowFileMenu(false);
+        // TODO: 실제로는 파일을 메시지로 전송하고 자료실에 추가
+      }
+    } catch (error) {
+      Alert.alert('오류', '파일을 선택하는 중 오류가 발생했습니다.');
+    }
+  };
+
   const renderMessage = (message: Message, index: number) => {
     const prevMessage = index > 0 ? messages[index - 1] : null;
 
@@ -231,6 +311,13 @@ export default function ChatRoomScreen() {
 
         {/* 메시지 입력창 */}
         <View style={styles.inputContainer}>
+          <TouchableOpacity
+            style={styles.plusButton}
+            onPress={() => setShowFileMenu(true)}
+          >
+            <Ionicons name="add" size={24} color="#007AFF" />
+          </TouchableOpacity>
+
           <TextInput
             style={styles.textInput}
             value={inputText}
@@ -240,6 +327,7 @@ export default function ChatRoomScreen() {
             multiline
             maxLength={500}
           />
+
           <TouchableOpacity
             style={[
               styles.sendButton,
@@ -257,6 +345,52 @@ export default function ChatRoomScreen() {
             />
           </TouchableOpacity>
         </View>
+
+        {/* 파일 선택 메뉴 모달 */}
+        <Modal
+          visible={showFileMenu}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setShowFileMenu(false)}
+        >
+          <TouchableOpacity
+            style={styles.modalOverlay}
+            activeOpacity={1}
+            onPress={() => setShowFileMenu(false)}
+          >
+            <View style={styles.fileMenuContainer}>
+              <TouchableOpacity
+                style={styles.fileMenuOption}
+                onPress={handleImagePicker}
+              >
+                <View style={styles.fileMenuIcon}>
+                  <Ionicons name="image" size={24} color="#FF2D92" />
+                </View>
+                <Text style={styles.fileMenuText}>이미지</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.fileMenuOption}
+                onPress={handleVideoPicker}
+              >
+                <View style={styles.fileMenuIcon}>
+                  <Ionicons name="videocam" size={24} color="#AF52DE" />
+                </View>
+                <Text style={styles.fileMenuText}>동영상</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.fileMenuOption}
+                onPress={handleDocumentPicker}
+              >
+                <View style={styles.fileMenuIcon}>
+                  <Ionicons name="document" size={24} color="#007AFF" />
+                </View>
+                <Text style={styles.fileMenuText}>파일</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </Modal>
       </KeyboardAvoidingView>
     </View>
   );
@@ -327,10 +461,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 10,
     backgroundColor: '#121216',
     borderTopWidth: 1,
     borderTopColor: '#292929',
+  },
+  plusButton: {
+    width: 30,
+    height: 30,
+    borderRadius: 20,
+    backgroundColor: '#1A1A1A',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: '#292929',
   },
   textInput: {
     flex: 1,
@@ -339,15 +484,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#292929',
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    fontSize: 16,
+    paddingVertical: 8,
+    fontSize: 12,
     color: '#FFFFFF',
-    maxHeight: 100,
+    maxHeight: 50,
     marginRight: 12,
   },
   sendButton: {
-    width: 40,
-    height: 40,
+    width: 30,
+    height: 30,
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
@@ -357,5 +502,43 @@ const styles = StyleSheet.create({
   },
   sendButtonInactive: {
     backgroundColor: '#292929',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  fileMenuContainer: {
+    backgroundColor: '#121216',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 30,
+    paddingBottom: 50,
+    borderWidth: 1,
+    borderColor: '#292929',
+    borderBottomWidth: 0,
+  },
+  fileMenuOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    marginBottom: 8,
+  },
+  fileMenuIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#1A1A1A',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 16,
+  },
+  fileMenuText: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#FFFFFF',
   },
 });

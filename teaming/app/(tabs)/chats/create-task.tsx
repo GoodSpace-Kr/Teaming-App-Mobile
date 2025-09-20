@@ -38,18 +38,24 @@ export default function CreateTaskScreen() {
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([
     {
       id: 1,
+      name: '최순조(팀장)',
+      avatar: require('../../../assets/images/(chattingRoom)/choi.png'),
+      isSelected: false,
+    },
+    {
+      id: 2,
       name: '권민석',
       avatar: require('../../../assets/images/(chattingRoom)/me.png'),
       isSelected: false,
     },
     {
-      id: 2,
+      id: 3,
       name: '정치학존잘남',
       avatar: require('../../../assets/images/(chattingRoom)/politicMan.png'),
       isSelected: false,
     },
     {
-      id: 3,
+      id: 4,
       name: '팀플하기싫다',
       avatar: require('../../../assets/images/(chattingRoom)/noTeample.png'),
       isSelected: false,
