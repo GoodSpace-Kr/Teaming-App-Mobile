@@ -9,10 +9,12 @@ import {
   ScrollView,
   Dimensions,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
+import { sendEmailCode, verifyEmailCode } from '../../src/services/emailAuth';
 
 const { width } = Dimensions.get('window');
 
@@ -24,6 +26,9 @@ export default function RegisterScreen() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [nickname, setNickname] = useState('');
   const [profileImage, setProfileImage] = useState<string | null>(null);
+  const [isEmailVerified, setIsEmailVerified] = useState(false);
+  const [isSendingCode, setIsSendingCode] = useState(false);
+  const [isVerifyingCode, setIsVerifyingCode] = useState(false);
 
   const totalSteps = 6;
 
@@ -43,9 +48,45 @@ export default function RegisterScreen() {
     setEmail(text);
   };
 
-  const handleSendVerification = () => {
-    console.log('인증번호 발송:', email);
-    // TODO: 실제 인증번호 발송 로직
+  const handleSendVerification = async () => {
+    if (!isEmailValid) return;
+
+    try {
+      setIsSendingCode(true);
+      const result = await sendEmailCode(email, false); // 신규 가입이므로 false
+
+      if (result.success) {
+        Alert.alert('성공', result.message || '인증 코드가 전송되었습니다.');
+      } else {
+        Alert.alert('오류', result.error || '인증 코드 전송에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('인증 코드 전송 에러:', error);
+      Alert.alert('오류', '인증 코드 전송 중 오류가 발생했습니다.');
+    } finally {
+      setIsSendingCode(false);
+    }
+  };
+
+  const handleVerifyCode = async () => {
+    if (!verificationCode.trim()) return;
+
+    try {
+      setIsVerifyingCode(true);
+      const result = await verifyEmailCode(email, verificationCode);
+
+      if (result.success) {
+        setIsEmailVerified(true);
+        Alert.alert('성공', result.message || '이메일 인증이 완료되었습니다.');
+      } else {
+        Alert.alert('오류', result.error || '인증 코드가 올바르지 않습니다.');
+      }
+    } catch (error) {
+      console.error('인증 코드 확인 에러:', error);
+      Alert.alert('오류', '인증 코드 확인 중 오류가 발생했습니다.');
+    } finally {
+      setIsVerifyingCode(false);
+    }
   };
 
   const handleSelectImage = async () => {
@@ -131,7 +172,7 @@ export default function RegisterScreen() {
       case 1:
         return true; // 환영 화면
       case 2:
-        return isEmailValid && isVerificationCodeValid; // 이메일 인증
+        return isEmailValid && isEmailVerified; // 이메일 인증 완료
       case 3:
         return isPasswordValid(password) && isPasswordMatch; // 비밀번호 설정
       case 4:
@@ -212,23 +253,57 @@ export default function RegisterScreen() {
       <TouchableOpacity
         style={[
           styles.verificationButton,
-          { backgroundColor: isEmailValid ? '#39359F' : '#333333' },
+          {
+            backgroundColor:
+              isEmailValid && !isSendingCode ? '#39359F' : '#333333',
+          },
         ]}
         onPress={handleSendVerification}
-        disabled={!isEmailValid}
+        disabled={!isEmailValid || isSendingCode}
       >
-        <Text style={styles.verificationButtonText}>인증번호 발송</Text>
+        {isSendingCode ? (
+          <ActivityIndicator size="small" color="#FFFFFF" />
+        ) : (
+          <Text style={styles.verificationButtonText}>인증번호 발송</Text>
+        )}
       </TouchableOpacity>
 
       {isEmailValid && (
-        <TextInput
-          style={styles.input}
-          placeholder="인증번호 입력"
-          placeholderTextColor="#888888"
-          value={verificationCode}
-          onChangeText={setVerificationCode}
-          keyboardType="number-pad"
-        />
+        <View style={styles.verificationCodeContainer}>
+          <TextInput
+            style={styles.input}
+            placeholder="인증번호 입력"
+            placeholderTextColor="#888888"
+            value={verificationCode}
+            onChangeText={setVerificationCode}
+            keyboardType="number-pad"
+          />
+          <TouchableOpacity
+            style={[
+              styles.verifyButton,
+              {
+                backgroundColor:
+                  verificationCode.trim() && !isVerifyingCode
+                    ? '#39359F'
+                    : '#333333',
+              },
+            ]}
+            onPress={handleVerifyCode}
+            disabled={!verificationCode.trim() || isVerifyingCode}
+          >
+            {isVerifyingCode ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <Text style={styles.verifyButtonText}>인증 확인</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {isEmailVerified && (
+        <Text style={styles.verificationSuccessText}>
+          ✓ 이메일 인증이 완료되었습니다.
+        </Text>
       )}
     </View>
   );
@@ -608,6 +683,28 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#FFFFFF',
+  },
+
+  // 인증코드 컨테이너
+  verificationCodeContainer: {
+    marginBottom: 16,
+  },
+  verifyButton: {
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  verifyButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  verificationSuccessText: {
+    fontSize: 14,
+    color: '#4CAF50',
+    textAlign: 'center',
+    marginTop: 8,
   },
 
   // 비밀번호 요구사항

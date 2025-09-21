@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -7,14 +7,18 @@ import {
   TouchableOpacity,
   Image,
   Dimensions,
+  Alert,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { logout } from '../../../src/services/authService';
 
 const { width } = Dimensions.get('window');
 
 export default function MyPageScreen() {
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
   const handleBackPress = () => {
     router.back();
   };
@@ -35,8 +39,35 @@ export default function MyPageScreen() {
     router.push('/(tabs)/profile/account-info');
   };
 
-  const handleLogout = () => {
-    console.log('로그아웃');
+  const handleLogout = async () => {
+    Alert.alert('로그아웃', '정말 로그아웃하시겠습니까?', [
+      {
+        text: '취소',
+        style: 'cancel',
+      },
+      {
+        text: '로그아웃',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            setIsLoggingOut(true);
+            const success = await logout();
+
+            if (success) {
+              Alert.alert('성공', '로그아웃되었습니다.');
+              router.replace('/(auth)');
+            } else {
+              Alert.alert('오류', '로그아웃 중 오류가 발생했습니다.');
+            }
+          } catch (error) {
+            console.error('로그아웃 에러:', error);
+            Alert.alert('오류', '로그아웃 중 오류가 발생했습니다.');
+          } finally {
+            setIsLoggingOut(false);
+          }
+        },
+      },
+    ]);
   };
 
   const handleWithdraw = () => {
@@ -147,14 +178,20 @@ export default function MyPageScreen() {
             <Ionicons name="chevron-forward" size={16} color="#666666" />
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.menuItem} onPress={handleLogout}>
+          <TouchableOpacity
+            style={styles.menuItem}
+            onPress={handleLogout}
+            disabled={isLoggingOut}
+          >
             <Ionicons
               name="desktop"
               size={20}
               color="#FFFFFF"
               style={styles.menuIcon}
             />
-            <Text style={styles.menuText}>로그아웃</Text>
+            <Text style={styles.menuText}>
+              {isLoggingOut ? '로그아웃 중...' : '로그아웃'}
+            </Text>
             <Ionicons name="chevron-forward" size={16} color="#666666" />
           </TouchableOpacity>
 

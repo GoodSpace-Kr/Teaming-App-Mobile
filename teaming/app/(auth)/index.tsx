@@ -7,13 +7,17 @@ import {
   TouchableOpacity,
   ScrollView,
   Dimensions,
+  ActivityIndicator,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
+import { useLandingStats } from '../../src/hooks/useLandingStats';
 
 const { width, height } = Dimensions.get('window');
 
 export default function LoginScreen() {
+  const { stats, loading, error } = useLandingStats();
+
   const handleLoginPress = () => {
     router.push('/(auth)/login');
   };
@@ -59,7 +63,15 @@ export default function LoginScreen() {
                 style={styles.statIconImage}
               />
             </View>
-            <Text style={styles.statNumber}>100팀</Text>
+            {loading ? (
+              <ActivityIndicator
+                size="small"
+                color="#FFFFFF"
+                style={styles.loadingIndicator}
+              />
+            ) : (
+              <Text style={styles.statNumber}>{stats.totalTeamCount}팀</Text>
+            )}
             <Text style={styles.statLabel}>만들어진 팀</Text>
           </View>
 
@@ -70,7 +82,15 @@ export default function LoginScreen() {
                 style={styles.statIconImage}
               />
             </View>
-            <Text style={styles.statNumber}>999명</Text>
+            {loading ? (
+              <ActivityIndicator
+                size="small"
+                color="#FFFFFF"
+                style={styles.loadingIndicator}
+              />
+            ) : (
+              <Text style={styles.statNumber}>{stats.totalUserCount}명</Text>
+            )}
             <Text style={styles.statLabel}>가입한 이용자</Text>
           </View>
 
@@ -81,7 +101,15 @@ export default function LoginScreen() {
                 style={styles.statIconImage}
               />
             </View>
-            <Text style={styles.statNumber}>2팀</Text>
+            {loading ? (
+              <ActivityIndicator
+                size="small"
+                color="#FFFFFF"
+                style={styles.loadingIndicator}
+              />
+            ) : (
+              <Text style={styles.statNumber}>{stats.completeTeamCount}팀</Text>
+            )}
             <Text style={styles.statLabel}>완수한 팀</Text>
           </View>
         </View>
@@ -261,6 +289,9 @@ const styles = StyleSheet.create({
     color: '#CCCCCC',
     textAlign: 'center',
     lineHeight: 16,
+  },
+  loadingIndicator: {
+    marginVertical: 10,
   },
 
   // 후기 섹션
