@@ -7,13 +7,20 @@ import {
   TouchableOpacity,
   Image,
   ScrollView,
+  Alert,
+  ActivityIndicator,
+  Modal,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
+import * as SecureStore from 'expo-secure-store';
+import KakaoLoginWebView from '../../src/components/KakaoLoginWebView';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [showKakaoWebView, setShowKakaoWebView] = useState(false);
 
   const handleLogin = () => {
     console.log('로그인 시도:', { email, password });
@@ -24,9 +31,38 @@ export default function LoginScreen() {
     router.push('/(auth)/register');
   };
 
-  const handleSocialLogin = (provider: string) => {
-    console.log(`${provider} 로그인 시도`);
-    // TODO: 실제 소셜 로그인 구현
+  const handleSocialLogin = async (provider: string) => {
+    if (provider === 'kakao') {
+      await handleKakaoLogin();
+    } else {
+      console.log(`${provider} 로그인 시도`);
+      Alert.alert('알림', `${provider} 로그인은 준비 중입니다.`);
+    }
+  };
+
+  const handleKakaoLogin = () => {
+    setShowKakaoWebView(true);
+  };
+
+  const handleKakaoLoginSuccess = async (result: any) => {
+    try {
+      console.log('✅ 카카오 로그인 성공:', result);
+
+      // WebView 닫기
+      setShowKakaoWebView(false);
+
+      // 메인 화면으로 이동 (토큰은 이미 WebView에서 저장됨)
+      router.replace('/(tabs)');
+    } catch (error) {
+      console.error('로그인 성공 처리 에러:', error);
+      Alert.alert('오류', '로그인 처리 중 오류가 발생했습니다.');
+    }
+  };
+
+  const handleKakaoLoginError = (error: string) => {
+    console.error('❌ 카카오 로그인 에러:', error);
+    setShowKakaoWebView(false);
+    Alert.alert('로그인 실패', error);
   };
 
   return (
@@ -98,11 +134,16 @@ export default function LoginScreen() {
           <TouchableOpacity
             style={[styles.socialButton, styles.kakaoButton]}
             onPress={() => handleSocialLogin('kakao')}
+            disabled={isLoading}
           >
-            <Image
-              source={require('../../assets/images/(social)/Kakao.png')}
-              style={styles.socialIcon}
-            />
+            {isLoading ? (
+              <ActivityIndicator size="small" color="#000000" />
+            ) : (
+              <Image
+                source={require('../../assets/images/(social)/Kakao.png')}
+                style={styles.socialIcon}
+              />
+            )}
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -136,6 +177,30 @@ export default function LoginScreen() {
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      {/* 카카오 로그인 WebView 모달 */}
+      <Modal
+        visible={showKakaoWebView}
+        animationType="slide"
+        presentationStyle="fullScreen"
+      >
+        <View style={styles.webViewContainer}>
+          <View style={styles.webViewHeader}>
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={() => setShowKakaoWebView(false)}
+            >
+              <Text style={styles.closeButtonText}>✕</Text>
+            </TouchableOpacity>
+            <Text style={styles.webViewTitle}>카카오 로그인</Text>
+            <View style={styles.placeholder} />
+          </View>
+          <KakaoLoginWebView
+            onLoginSuccess={handleKakaoLoginSuccess}
+            onLoginError={handleKakaoLoginError}
+          />
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -276,5 +341,38 @@ const styles = StyleSheet.create({
   socialIcon: {
     width: 32,
     height: 32,
+  },
+
+  // WebView 모달 스타일
+  webViewContainer: {
+    flex: 1,
+    backgroundColor: '#000000',
+  },
+  webViewHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 60,
+    paddingBottom: 20,
+    backgroundColor: '#000000',
+  },
+  closeButton: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  closeButtonText: {
+    fontSize: 24,
+    color: '#FFFFFF',
+    fontWeight: '300',
+  },
+  webViewTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    flex: 1,
+    textAlign: 'center',
   },
 });

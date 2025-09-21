@@ -2,6 +2,7 @@
   "expo": {
     "name": "teaming",
     "slug": "teaming",
+    "owner": "staralstjr",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -9,14 +10,46 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.teaming.app",
+      "infoPlist": {
+        "CFBundleURLTypes": [
+          {
+            "CFBundleURLName": "kakao",
+            "CFBundleURLSchemes": ["kakaobab0d232a194e56bd4920ba68c04e3e6"]
+          }
+        ],
+        "KAKAO_APP_KEY": "bab0d232a194e56bd4920ba68c04e3e6"
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "package": "com.teaming.app",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "data": [
+            {
+              "scheme": "kakaobab0d232a194e56bd4920ba68c04e3e6"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ],
+      "manifest": {
+        "application": {
+          "meta-data": [
+            {
+              "android:name": "com.kakao.sdk.AppKey",
+              "android:value": "bab0d232a194e56bd4920ba68c04e3e6"
+            }
+          ]
+        }
+      }
     },
     "web": {
       "bundler": "metro",
@@ -33,10 +66,18 @@
           "resizeMode": "contain",
           "backgroundColor": "#ffffff"
         }
-      ]
+      ],
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "kakao": {
+        "restApiKey": "bab0d232a194e56bd4920ba68c04e3e6",
+        "nativeAppKey": "ef68b0ce337d545b15961e5e8049a659",
+        "javascriptKey": "2c5b290684c5039796de51681443e168"
+      }
     }
   }
 }
