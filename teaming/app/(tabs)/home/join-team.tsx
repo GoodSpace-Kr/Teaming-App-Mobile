@@ -8,10 +8,16 @@ import {
   TextInput,
   Image,
   Dimensions,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import {
+  searchRoomByInviteCode,
+  RoomSearchResponse,
+} from '../../../src/services/teamService';
 
 const { width } = Dimensions.get('window');
 
@@ -29,25 +35,50 @@ interface FoundRoom {
 export default function JoinTeamScreen() {
   const [roomCode, setRoomCode] = useState('');
   const [foundRoom, setFoundRoom] = useState<FoundRoom | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
 
   const handleBackPress = () => {
     router.back();
   };
 
-  const handleSearch = () => {
-    console.log('찾기 버튼 클릭:', roomCode);
-    // TODO: 실제 검색 로직 구현
-    // 임시로 더미 데이터 설정
-    setFoundRoom({
-      id: 1,
-      title: '정치학 발표',
-      subtitle: '정치학개론',
-      members: require('../../../assets/images/(beforeLogin)/bluePeople.png'),
-      memberCount: '2/4명',
-      roomType: 'Basic Room',
-      price: '각 2060원',
-      benefit: '메가커피 아이스 아메리카노 1개',
-    });
+  const handleSearch = async () => {
+    if (!roomCode.trim()) {
+      Alert.alert('오류', '초대코드를 입력해주세요.');
+      return;
+    }
+
+    try {
+      setIsSearching(true);
+      console.log('찾기 버튼 클릭:', roomCode);
+
+      // API 호출
+      const roomData = await searchRoomByInviteCode(roomCode.trim());
+
+      // API 응답을 UI에 맞게 변환
+      setFoundRoom({
+        id: 1, // 임시 ID
+        title: roomData.title,
+        subtitle: roomData.type.description,
+        members: roomData.imageKey
+          ? { uri: `https://your-cdn-url.com/${roomData.imageKey}` }
+          : require('../../../assets/images/(beforeLogin)/bluePeople.png'),
+        memberCount: `${roomData.currentMemberCount}/${roomData.maxMemberCount}명`,
+        roomType: roomData.type.typeName,
+        price: `각 ${roomData.type.price}원`,
+        benefit: roomData.type.description,
+      });
+
+      console.log('✅ 방 검색 성공:', roomData);
+    } catch (error) {
+      console.error('❌ 방 검색 실패:', error);
+      Alert.alert(
+        '방을 찾을 수 없습니다',
+        '입력하신 초대코드가 올바르지 않습니다.\n코드를 다시 확인해주세요.'
+      );
+      setFoundRoom(null);
+    } finally {
+      setIsSearching(false);
+    }
   };
 
   const handleEnter = () => {
@@ -90,10 +121,18 @@ export default function JoinTeamScreen() {
               keyboardType="numeric"
             />
             <TouchableOpacity
-              style={styles.searchButton}
+              style={[
+                styles.searchButton,
+                isSearching && styles.searchButtonDisabled,
+              ]}
               onPress={handleSearch}
+              disabled={isSearching}
             >
-              <Text style={styles.searchButtonText}>찾기</Text>
+              {isSearching ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Text style={styles.searchButtonText}>찾기</Text>
+              )}
             </TouchableOpacity>
           </View>
         </View>
@@ -228,6 +267,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#FFFFFF',
+  },
+  searchButtonDisabled: {
+    backgroundColor: '#666666',
+    shadowOpacity: 0.2,
   },
   roomInfoCard: {
     backgroundColor: '#121216',

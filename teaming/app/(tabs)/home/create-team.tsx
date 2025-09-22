@@ -72,9 +72,9 @@ export default function CreateTeamScreen() {
         description: subtitle.trim(),
         memberCount: teamCount,
         roomType: selectedRoom.toUpperCase() as 'BASIC' | 'PREMIUM' | 'ELITE',
-        // TODO: 이미지 업로드 구현 시 imageKey, imageVersion 추가
-        // imageKey: roomImage ? 'uploaded-image-key' : undefined,
-        // imageVersion: roomImage ? 1 : undefined,
+        // 이미지가 있으면 imageKey 설정, 없으면 undefined
+        imageKey: roomImage ? `team-image-${Date.now()}` : undefined,
+        imageVersion: roomImage ? 1 : undefined,
       };
 
       console.log('📤 팀 생성 요청 데이터:', teamData);

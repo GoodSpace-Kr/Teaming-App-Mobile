@@ -16,6 +16,19 @@ export interface CreateTeamResponse {
   success?: boolean;
 }
 
+export interface RoomSearchResponse {
+  title: string;
+  imageKey: string;
+  imageVersion: number;
+  type: {
+    typeName: string;
+    price: number;
+    description: string;
+  };
+  currentMemberCount: number;
+  maxMemberCount: number;
+}
+
 /**
  * 팀 생성
  */
@@ -29,6 +42,25 @@ export const createTeam = async (
     return response.data;
   } catch (error) {
     console.error('❌ 팀 생성 실패:', error);
+    throw error;
+  }
+};
+
+/**
+ * 초대코드로 방 검색
+ */
+export const searchRoomByInviteCode = async (
+  inviteCode: string
+): Promise<RoomSearchResponse> => {
+  try {
+    console.log('🚀 방 검색 요청 중...', inviteCode);
+    const response = await apiClient.get('/rooms/search', {
+      params: { inviteCode },
+    });
+    console.log('✅ 방 검색 응답:', response.data);
+    return response.data;
+  } catch (error) {
+    console.error('❌ 방 검색 실패:', error);
     throw error;
   }
 };

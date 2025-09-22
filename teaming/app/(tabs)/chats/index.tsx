@@ -130,6 +130,9 @@ export default function ChatsScreen() {
                       }}
                       style={styles.roomIcon}
                       defaultSource={require('../../../assets/images/(beforeLogin)/bluePeople.png')}
+                      onError={() => {
+                        console.log('이미지 로드 실패, 기본 아이콘으로 대체');
+                      }}
                     />
                   ) : (
                     <View style={styles.defaultRoomIcon}>

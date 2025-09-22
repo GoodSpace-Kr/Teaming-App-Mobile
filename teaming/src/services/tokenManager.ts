@@ -70,16 +70,16 @@ export const refreshAccessToken = async (): Promise<boolean> => {
     }
 
     console.log('🔄 토큰 갱신 시도...');
-    const response = await apiClient.post('/api/auth/refresh', {
+    const response = await apiClient.post('/api/auth/token/access-token', {
       refreshToken: refreshToken,
     });
 
     if (response.data?.accessToken) {
-      await saveTokens({
-        accessToken: response.data.accessToken,
-        refreshToken: response.data.refreshToken,
-        user: response.data.user,
-      });
+      // 새로운 accessToken만 저장 (refreshToken은 그대로 유지)
+      await SecureStore.setItemAsync(
+        ACCESS_TOKEN_KEY,
+        response.data.accessToken
+      );
       console.log('✅ 토큰 갱신 성공');
       return true;
     }
