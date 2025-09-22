@@ -8,13 +8,22 @@ import {
   Image,
   Dimensions,
 } from 'react-native';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
+import { useCallback } from 'react';
 
 const { width } = Dimensions.get('window');
 
 export default function HomeScreen() {
+  // 홈 탭이 포커스될 때마다 초기화
+  useFocusEffect(
+    useCallback(() => {
+      // 홈 화면으로 돌아올 때 필요한 초기화 로직
+      console.log('홈 화면 포커스 - 초기화');
+    }, [])
+  );
+
   const teams = [
     {
       id: 1,

@@ -14,7 +14,6 @@ export default function HomeLayout() {
         name="create-team"
         options={{
           headerShown: false,
-          presentation: 'modal',
         }}
       />
       <Stack.Screen

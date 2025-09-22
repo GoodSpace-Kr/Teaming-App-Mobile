@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,11 +9,17 @@ import {
   Image,
   Dimensions,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import TeamInviteModal from '../../../src/components/TeamInviteModal';
+import {
+  createTeam,
+  CreateTeamRequest,
+} from '../../../src/services/teamService';
 
 const { width } = Dimensions.get('window');
 
@@ -25,21 +31,88 @@ export default function CreateTeamScreen() {
   const [emails, setEmails] = useState(['', '', '']);
   const [roomImage, setRoomImage] = useState<string | null>(null);
 
+  // 초대 모달 상태
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [createdTeamName, setCreatedTeamName] = useState('');
+  const [inviteCode, setInviteCode] = useState('');
+  const [isCreating, setIsCreating] = useState(false);
+
+  // 탭 전환 감지 및 처리
+  useFocusEffect(
+    useCallback(() => {
+      // 이 화면이 포커스될 때마다 실행
+      console.log('팀 생성 화면 포커스');
+    }, [])
+  );
+
   const handleBackPress = () => {
     router.back();
   };
 
-  const handleCreateRoom = () => {
+  const handleCreateRoom = async () => {
     console.log('티밍룸 생성하기 버튼 클릭');
-    // Modal 닫기
-    router.dismiss();
-    // 약간의 지연 후 채팅방 목록을 거쳐서 채팅방으로 이동 (팀장으로)
-    setTimeout(() => {
-      router.push('/(tabs)/chats');
-      setTimeout(() => {
-        router.push('/(tabs)/chats/chat-room/1?isLeader=true');
-      }, 100);
-    }, 100);
+
+    // 입력 검증
+    if (!roomTitle.trim()) {
+      Alert.alert('오류', '팀 이름을 입력해주세요.');
+      return;
+    }
+
+    if (!subtitle.trim()) {
+      Alert.alert('오류', '팀 설명을 입력해주세요.');
+      return;
+    }
+
+    try {
+      setIsCreating(true);
+
+      // 팀 생성 요청 데이터 준비
+      const teamData: CreateTeamRequest = {
+        title: roomTitle.trim(),
+        description: subtitle.trim(),
+        memberCount: teamCount,
+        roomType: selectedRoom.toUpperCase() as 'BASIC' | 'PREMIUM' | 'ELITE',
+        // TODO: 이미지 업로드 구현 시 imageKey, imageVersion 추가
+        // imageKey: roomImage ? 'uploaded-image-key' : undefined,
+        // imageVersion: roomImage ? 1 : undefined,
+      };
+
+      console.log('📤 팀 생성 요청 데이터:', teamData);
+
+      // 서버에 팀 생성 요청
+      const response = await createTeam(teamData);
+
+      console.log('✅ 팀 생성 성공:', response);
+
+      // 서버에서 받은 초대 코드 사용
+      setCreatedTeamName(roomTitle);
+      setInviteCode(response.inviteCode);
+
+      // 초대 모달 표시
+      setShowInviteModal(true);
+    } catch (error) {
+      console.error('❌ 팀 생성 실패:', error);
+      Alert.alert('오류', '팀 생성에 실패했습니다. 다시 시도해주세요.');
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  // 초대 모달 닫기만 하는 핸들러
+  const handleInviteClose = () => {
+    setShowInviteModal(false);
+  };
+
+  // 초대 모달의 "채팅방 목록으로 이동" 눌렀을 때
+  const handleEnterRoom = async () => {
+    // 1) 모달 닫기
+    setShowInviteModal(false);
+
+    // 2) 한 틱 대기해서 Modal의 visible=false가 반영되도록 함
+    await new Promise((r) => setTimeout(r, 50));
+
+    // 3) 채팅방 목록으로 이동
+    router.push('/(tabs)/chats');
   };
 
   const handleSendInvite = (index: number) => {
@@ -261,38 +334,38 @@ export default function CreateTeamScreen() {
             </View>
           </View>
         </View>
-
-        {/* 팀원 초대하기 */}
-        <View style={styles.inputSection}>
-          <Text style={styles.inputLabel}>팀원 초대하기</Text>
-          {emails.slice(0, teamCount).map((email, index) => (
-            <View key={index} style={styles.emailContainer}>
-              <TextInput
-                style={styles.emailInput}
-                value={email}
-                onChangeText={(text) => handleEmailChange(index, text)}
-                placeholder="팀원의 이메일을 입력해주세요"
-                placeholderTextColor="#666666"
-                keyboardType="email-address"
-              />
-              <TouchableOpacity
-                style={styles.inviteButton}
-                onPress={() => handleSendInvite(index)}
-              >
-                <Text style={styles.inviteButtonText}>초대코드 발송</Text>
-              </TouchableOpacity>
-            </View>
-          ))}
-        </View>
-
         {/* 티밍룸 생성하기 버튼 */}
         <TouchableOpacity
-          style={styles.createButton}
+          style={[
+            styles.createButton,
+            isCreating && styles.createButtonDisabled,
+          ]}
           onPress={handleCreateRoom}
+          disabled={isCreating}
         >
-          <Text style={styles.createButtonText}>티밍룸 생성하기</Text>
+          {isCreating ? (
+            <>
+              <ActivityIndicator
+                size="small"
+                color="#FFFFFF"
+                style={{ marginRight: 8 }}
+              />
+              <Text style={styles.createButtonText}>생성 중...</Text>
+            </>
+          ) : (
+            <Text style={styles.createButtonText}>티밍룸 생성하기</Text>
+          )}
         </TouchableOpacity>
       </ScrollView>
+
+      {/* 팀 초대 모달 */}
+      <TeamInviteModal
+        visible={showInviteModal}
+        onClose={handleInviteClose} // ✅ 닫기만
+        onEnterRoom={handleEnterRoom} // ✅ 닫고 전환은 여기서만
+        teamName={createdTeamName}
+        inviteCode={inviteCode}
+      />
     </View>
   );
 }
@@ -535,6 +608,12 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.5,
     shadowRadius: 10,
     elevation: 8,
+    flexDirection: 'row',
+    justifyContent: 'center',
+  },
+  createButtonDisabled: {
+    backgroundColor: '#666666',
+    shadowOpacity: 0.2,
   },
   createButtonText: {
     fontSize: 18,
