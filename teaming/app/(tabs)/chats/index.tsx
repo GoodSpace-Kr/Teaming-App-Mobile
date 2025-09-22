@@ -14,6 +14,8 @@ import { StatusBar } from 'expo-status-bar';
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { getChatRooms, ChatRoom } from '../../../src/services/chatService';
+import { useWebSocket } from '../../../src/hooks/useWebSocket';
+import { getAccessToken } from '../../../src/services/tokenManager';
 
 const { width } = Dimensions.get('window');
 
@@ -22,6 +24,26 @@ export default function ChatsScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [retryKey, setRetryKey] = useState(0);
+  const [jwt, setJwt] = useState<string | null>(null);
+
+  // JWT 토큰 가져오기
+  useEffect(() => {
+    const loadToken = async () => {
+      try {
+        const token = await getAccessToken();
+        setJwt(token);
+      } catch (error) {
+        console.error('토큰 로드 실패:', error);
+      }
+    };
+    loadToken();
+  }, []);
+
+  // 웹소켓 연결 (전체 채팅방 목록 업데이트용)
+  const { isConnected } = useWebSocket({
+    jwt: jwt || '',
+    autoConnect: !!jwt,
+  });
 
   // 채팅방 탭이 포커스될 때마다 초기화 및 데이터 새로고침
   useFocusEffect(

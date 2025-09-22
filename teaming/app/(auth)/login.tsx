@@ -15,12 +15,16 @@ import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import KakaoLoginWebView from '../../src/components/KakaoLoginWebView';
+import GoogleLoginWebView from '../../src/components/GoogleLoginWebView';
+import NaverLoginWebView from '../../src/components/NaverLoginWebView';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showKakaoWebView, setShowKakaoWebView] = useState(false);
+  const [showGoogleWebView, setShowGoogleWebView] = useState(false);
+  const [showNaverWebView, setShowNaverWebView] = useState(false);
 
   const handleLogin = () => {
     console.log('로그인 시도:', { email, password });
@@ -34,6 +38,10 @@ export default function LoginScreen() {
   const handleSocialLogin = async (provider: string) => {
     if (provider === 'kakao') {
       await handleKakaoLogin();
+    } else if (provider === 'google') {
+      await handleGoogleLogin();
+    } else if (provider === 'naver') {
+      await handleNaverLogin();
     } else {
       console.log(`${provider} 로그인 시도`);
       Alert.alert('알림', `${provider} 로그인은 준비 중입니다.`);
@@ -42,6 +50,16 @@ export default function LoginScreen() {
 
   const handleKakaoLogin = () => {
     setShowKakaoWebView(true);
+  };
+
+  const handleGoogleLogin = () => {
+    console.log('🔵 구글 로그인 버튼 클릭');
+    setShowGoogleWebView(true);
+  };
+
+  const handleNaverLogin = () => {
+    console.log('🟢 네이버 로그인 버튼 클릭');
+    setShowNaverWebView(true);
   };
 
   const handleKakaoLoginSuccess = async (result: any) => {
@@ -62,6 +80,59 @@ export default function LoginScreen() {
   const handleKakaoLoginError = (error: string) => {
     console.error('❌ 카카오 로그인 에러:', error);
     setShowKakaoWebView(false);
+    Alert.alert('로그인 실패', error);
+  };
+
+  const handleGoogleLoginSuccess = async (result: any) => {
+    try {
+      console.log('🎉 구글 로그인 성공 콜백 호출');
+      console.log('✅ 구글 로그인 성공:', result);
+      console.log('✅ 구글 로그인 결과 타입:', typeof result);
+      console.log('✅ 구글 로그인 결과 키들:', Object.keys(result || {}));
+      console.log('✅ accessToken 존재:', !!result?.accessToken);
+      console.log('✅ refreshToken 존재:', !!result?.refreshToken);
+      console.log('✅ user 데이터 존재:', !!result?.user);
+
+      // WebView 닫기
+      console.log('🔄 WebView 닫기');
+      setShowGoogleWebView(false);
+
+      // 메인 화면으로 이동 (토큰은 이미 WebView에서 저장됨)
+      console.log('🚀 메인 화면으로 이동');
+      router.replace('/(tabs)');
+    } catch (error) {
+      console.error('🔴 로그인 성공 처리 에러:', error);
+      Alert.alert('오류', '로그인 처리 중 오류가 발생했습니다.');
+    }
+  };
+
+  const handleGoogleLoginError = (error: string) => {
+    console.error('💥 구글 로그인 에러 콜백 호출');
+    console.error('❌ 구글 로그인 에러:', error);
+    console.error('❌ 구글 로그인 에러 타입:', typeof error);
+    console.error('❌ 구글 로그인 에러 길이:', error?.length);
+    setShowGoogleWebView(false);
+    Alert.alert('로그인 실패', error);
+  };
+
+  const handleNaverLoginSuccess = async (result: any) => {
+    try {
+      console.log('✅ 네이버 로그인 성공:', result);
+
+      // WebView 닫기
+      setShowNaverWebView(false);
+
+      // 메인 화면으로 이동 (토큰은 이미 WebView에서 저장됨)
+      router.replace('/(tabs)');
+    } catch (error) {
+      console.error('로그인 성공 처리 에러:', error);
+      Alert.alert('오류', '로그인 처리 중 오류가 발생했습니다.');
+    }
+  };
+
+  const handleNaverLoginError = (error: string) => {
+    console.error('❌ 네이버 로그인 에러:', error);
+    setShowNaverWebView(false);
     Alert.alert('로그인 실패', error);
   };
 
@@ -198,6 +269,59 @@ export default function LoginScreen() {
           <KakaoLoginWebView
             onLoginSuccess={handleKakaoLoginSuccess}
             onLoginError={handleKakaoLoginError}
+          />
+        </View>
+      </Modal>
+
+      {/* 구글 로그인 WebView 모달 */}
+      {/* 구글 로그인 모달 (웹뷰 → auth-session 버전으로 교체) */}
+      <Modal
+        visible={showGoogleWebView}
+        animationType="slide"
+        presentationStyle="fullScreen"
+        onRequestClose={() => setShowGoogleWebView(false)}
+      >
+        <View style={styles.webViewContainer}>
+          <View style={styles.webViewHeader}>
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={() => setShowGoogleWebView(false)}
+            >
+              <Text style={styles.closeButtonText}>✕</Text>
+            </TouchableOpacity>
+            <Text style={styles.webViewTitle}>구글 로그인</Text>
+            <View style={styles.placeholder} />
+          </View>
+
+          <GoogleLoginWebView
+            onLoginSuccess={handleGoogleLoginSuccess}
+            onLoginError={handleGoogleLoginError}
+          />
+        </View>
+      </Modal>
+
+      {/* 네이버 로그인 WebView 모달 */}
+      <Modal
+        visible={showNaverWebView}
+        animationType="slide"
+        presentationStyle="fullScreen"
+        onRequestClose={() => setShowNaverWebView(false)}
+      >
+        <View style={styles.webViewContainer}>
+          <View style={styles.webViewHeader}>
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={() => setShowNaverWebView(false)}
+            >
+              <Text style={styles.closeButtonText}>✕</Text>
+            </TouchableOpacity>
+            <Text style={styles.webViewTitle}>네이버 로그인</Text>
+            <View style={styles.placeholder} />
+          </View>
+
+          <NaverLoginWebView
+            onLoginSuccess={handleNaverLoginSuccess}
+            onLoginError={handleNaverLoginError}
           />
         </View>
       </Modal>

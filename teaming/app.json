@@ -17,6 +17,10 @@
           {
             "CFBundleURLName": "kakao",
             "CFBundleURLSchemes": ["kakaobab0d232a194e56bd4920ba68c04e3e6"]
+          },
+          {
+            "CFBundleURLName": "google",
+            "CFBundleURLSchemes": ["com.teaming.app"]
           }
         ],
         "KAKAO_APP_KEY": "bab0d232a194e56bd4920ba68c04e3e6"
@@ -35,6 +39,15 @@
           "data": [
             {
               "scheme": "kakaobab0d232a194e56bd4920ba68c04e3e6"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        },
+        {
+          "action": "VIEW",
+          "data": [
+            {
+              "scheme": "com.teaming.app"
             }
           ],
           "category": ["BROWSABLE", "DEFAULT"]

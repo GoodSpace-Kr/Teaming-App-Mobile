@@ -43,6 +43,15 @@ apiClient.interceptors.request.use(
       );
       console.log('요청 데이터:', config.data);
       console.log('요청 헤더:', config.headers);
+
+      // 구글 로그인 API 특별 로깅
+      if (
+        config.url?.includes('/api/auth/app/google') ||
+        config.url?.includes('/api/auth/web/google')
+      ) {
+        console.log('🔵 구글 로그인 API 요청');
+        console.log('📤 전송 데이터:', JSON.stringify(config.data, null, 2));
+      }
     } catch (error) {
       console.error('토큰 가져오기 실패:', error);
     }
@@ -65,6 +74,17 @@ apiClient.interceptors.response.use(
     );
     console.log('응답 상태:', response.status);
     console.log('응답 데이터:', response.data);
+
+    // 구글 로그인 API 특별 로깅
+    if (
+      response.config.url?.includes('/api/auth/app/google') ||
+      response.config.url?.includes('/api/auth/web/google')
+    ) {
+      console.log('🔵 구글 로그인 API 응답');
+      console.log('📥 응답 상태:', response.status);
+      console.log('📥 받은 데이터:', JSON.stringify(response.data, null, 2));
+    }
+
     return response;
   },
   async (error) => {
@@ -77,6 +97,19 @@ apiClient.interceptors.response.use(
     console.error('에러 상태:', error.response?.status);
     console.error('에러 데이터:', error.response?.data);
     console.error('에러 메시지:', error.message);
+
+    // 구글 로그인 API 에러 특별 로깅
+    if (
+      error.config?.url?.includes('/api/auth/app/google') ||
+      error.config?.url?.includes('/api/auth/web/google')
+    ) {
+      console.error('🔴 구글 로그인 API 에러');
+      console.error('📥 에러 상태:', error.response?.status);
+      console.error(
+        '📥 에러 데이터:',
+        JSON.stringify(error.response?.data, null, 2)
+      );
+    }
 
     // 401 에러 처리 (토큰 만료)
     if (error.response?.status === 401 && !originalRequest._retry) {
