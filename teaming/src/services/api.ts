@@ -165,4 +165,111 @@ export const testServerConnection = async (): Promise<boolean> => {
   }
 };
 
+// 회원가입 API
+export interface SignUpRequest {
+  email: string;
+  password: string;
+  name: string;
+  avatarKey: string;
+  avatarVersion: number;
+}
+
+export interface SignUpResponse {
+  accessToken: string;
+  refreshToken: string;
+}
+
+export const signUp = async (data: SignUpRequest): Promise<SignUpResponse> => {
+  try {
+    console.log('🚀 회원가입 API 요청:', data);
+    const response = await apiClient.post<SignUpResponse>(
+      '/api/auth/teaming/sign-up',
+      data
+    );
+    console.log('✅ 회원가입 성공:', response.data);
+    return response.data;
+  } catch (error: any) {
+    console.error('❌ 회원가입 실패:', error);
+    throw error;
+  }
+};
+
+// 로그인 API
+export interface LoginRequest {
+  email: string;
+  password: string;
+}
+
+export interface LoginResponse {
+  accessToken: string;
+  refreshToken: string;
+}
+
+export const login = async (data: LoginRequest): Promise<LoginResponse> => {
+  try {
+    console.log('🚀 로그인 API 요청:', data);
+    const response = await apiClient.post<LoginResponse>(
+      '/api/auth/teaming/sign-in',
+      data
+    );
+    console.log('✅ 로그인 성공:', response.data);
+    return response.data;
+  } catch (error: any) {
+    console.error('❌ 로그인 실패:', error);
+    throw error;
+  }
+};
+
+// 이메일 수정 API
+export interface UpdateEmailRequest {
+  email: string;
+}
+
+export const updateEmail = async (data: UpdateEmailRequest): Promise<void> => {
+  try {
+    console.log('🚀 이메일 수정 API 요청:', data);
+    const response = await apiClient.patch('/users/me/email', data);
+    console.log('✅ 이메일 수정 성공:', response.data);
+  } catch (error: any) {
+    console.error('❌ 이메일 수정 실패:', error);
+    throw error;
+  }
+};
+
+// 사용자 정보 조회 API
+export interface UserInfo {
+  email: string;
+  name: string;
+  avatarKey: string;
+  avatarVersion: number;
+}
+
+export const getUserInfo = async (): Promise<UserInfo> => {
+  try {
+    console.log('🚀 사용자 정보 조회 API 요청');
+    const response = await apiClient.get<UserInfo>('/users/me');
+    console.log('✅ 사용자 정보 조회 성공:', response.data);
+    return response.data;
+  } catch (error: any) {
+    console.error('❌ 사용자 정보 조회 실패:', error);
+    throw error;
+  }
+};
+
+// 닉네임 변경 API
+export interface UpdateNameRequest {
+  name: string;
+}
+
+export const updateName = async (data: UpdateNameRequest): Promise<void> => {
+  try {
+    console.log('🚀 닉네임 변경 API 요청:', data);
+    const response = await apiClient.patch('/users/me/name', data);
+    console.log('✅ 닉네임 변경 성공:', response.data);
+  } catch (error: any) {
+    console.error('❌ 닉네임 변경 실패:', error);
+    throw error;
+  }
+};
+
 export default apiClient;

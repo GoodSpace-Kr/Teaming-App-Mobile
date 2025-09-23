@@ -111,6 +111,7 @@ export default function NaverLoginWebView({
         await saveTokens({
           accessToken: res.data.accessToken,
           refreshToken: res.data.refreshToken,
+          loginType: 'naver',
           user: res.data.user,
         });
 

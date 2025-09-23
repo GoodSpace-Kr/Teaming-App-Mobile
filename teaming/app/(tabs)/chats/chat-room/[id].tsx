@@ -137,7 +137,8 @@ export default function ChatRoomScreen() {
       wsError,
     });
 
-    if (inputText.trim() && isConnected) {
+    if (inputText.trim()) {
+      // 연결 상태와 관계없이 전송 시도
       sendTextMessage(inputText.trim());
       setInputText('');
 
@@ -145,13 +146,6 @@ export default function ChatRoomScreen() {
       setTimeout(() => {
         scrollViewRef.current?.scrollToEnd({ animated: true });
       }, 100);
-    } else if (!isConnected) {
-      console.error('❌ 웹소켓 연결 상태 문제:', {
-        isConnected,
-        status,
-        wsError,
-      });
-      Alert.alert('연결 오류', '웹소켓이 연결되지 않았습니다.');
     }
   };
 

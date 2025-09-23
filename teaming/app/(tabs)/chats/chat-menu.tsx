@@ -11,7 +11,6 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import LeaveTeamModal from './leave-team-modal';
 import CompleteTeamModal from './complete-team-modal';
 
 const { width } = Dimensions.get('window');
@@ -233,30 +232,7 @@ export default function ChatMenuScreen() {
             </TouchableOpacity>
           </View>
         )}
-
-        {/* 팀밍룸 나가기 */}
-        <View style={styles.section}>
-          <TouchableOpacity
-            style={styles.leaveButton}
-            onPress={handleLeaveRoom}
-          >
-            <View style={styles.leaveIcon}>
-              <Ionicons name="exit" size={24} color="#FF3B30" />
-            </View>
-            <Text style={styles.leaveText}>티밍룸 나가기</Text>
-            <Ionicons name="chevron-forward" size={20} color="#666666" />
-          </TouchableOpacity>
-        </View>
       </ScrollView>
-
-      {/* 티밍룸 나가기 모달 */}
-      <LeaveTeamModal
-        visible={showLeaveModal}
-        onClose={handleCancelLeave}
-        onConfirm={handleConfirmLeave}
-        teamName="정치학 발표"
-      />
-
       {/* 팀플 완료 모달 */}
       <CompleteTeamModal
         visible={showCompleteModal}

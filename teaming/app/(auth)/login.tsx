@@ -17,6 +17,8 @@ import * as SecureStore from 'expo-secure-store';
 import KakaoLoginWebView from '../../src/components/KakaoLoginWebView';
 import GoogleLoginWebView from '../../src/components/GoogleLoginWebView';
 import NaverLoginWebView from '../../src/components/NaverLoginWebView';
+import { login, LoginRequest } from '../../src/services/api';
+import { saveTokens } from '../../src/services/tokenManager';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -26,9 +28,52 @@ export default function LoginScreen() {
   const [showGoogleWebView, setShowGoogleWebView] = useState(false);
   const [showNaverWebView, setShowNaverWebView] = useState(false);
 
-  const handleLogin = () => {
-    console.log('로그인 시도:', { email, password });
-    // TODO: 실제 로그인 로직 구현
+  const handleLogin = async () => {
+    if (!email.trim() || !password.trim()) {
+      Alert.alert('입력 오류', '이메일과 비밀번호를 입력해주세요.');
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+
+      const loginData: LoginRequest = {
+        email: email.trim(),
+        password: password.trim(),
+      };
+
+      console.log('로그인 시도:', loginData);
+
+      const response = await login(loginData);
+
+      // 토큰 저장
+      await saveTokens({
+        accessToken: response.accessToken,
+        refreshToken: response.refreshToken,
+        loginType: 'email',
+      });
+
+      console.log('로그인 성공, 토큰 저장 완료');
+
+      // 메인 화면으로 이동
+      router.replace('/(tabs)');
+    } catch (error: any) {
+      console.error('로그인 실패:', error);
+
+      let errorMessage = '로그인 중 오류가 발생했습니다.';
+
+      if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.response?.status === 401) {
+        errorMessage = '이메일 또는 비밀번호가 올바르지 않습니다.';
+      } else if (error.response?.status === 404) {
+        errorMessage = '존재하지 않는 계정입니다.';
+      }
+
+      Alert.alert('로그인 실패', errorMessage);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleRegister = () => {
@@ -181,8 +226,16 @@ export default function LoginScreen() {
 
         {/* 버튼 섹션 */}
         <View style={styles.buttonSection}>
-          <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
-            <Text style={styles.loginButtonText}>로그인</Text>
+          <TouchableOpacity
+            style={[styles.loginButton, { opacity: isLoading ? 0.7 : 1 }]}
+            onPress={handleLogin}
+            disabled={isLoading}
+          >
+            {isLoading ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <Text style={styles.loginButtonText}>로그인</Text>
+            )}
           </TouchableOpacity>
 
           <TouchableOpacity

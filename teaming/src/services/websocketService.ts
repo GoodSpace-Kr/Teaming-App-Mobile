@@ -238,7 +238,7 @@ export class WebSocketService {
       const originalOnWebSocketError = this.client.onWebSocketError;
 
       this.client.onConnect = (frame: any) => {
-        console.log('✅ 웹소켓 연결 완료:', frame);
+        console.log('✅ 웹소켓 연결 완료 (Promise):', frame);
         // 원래 핸들러도 호출
         if (originalOnConnect) {
           originalOnConnect(frame);

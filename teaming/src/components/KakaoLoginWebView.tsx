@@ -88,6 +88,7 @@ export default function KakaoLoginWebView({
         await saveTokens({
           accessToken: res.data.accessToken,
           refreshToken: res.data.refreshToken,
+          loginType: 'kakao',
           user: res.data.user,
         });
 

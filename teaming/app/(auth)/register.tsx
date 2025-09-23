@@ -15,6 +15,8 @@ import * as ImagePicker from 'expo-image-picker';
 import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
 import { sendEmailCode, verifyEmailCode } from '../../src/services/emailAuth';
+import { signUp, SignUpRequest } from '../../src/services/api';
+import { saveTokens } from '../../src/services/tokenManager';
 
 const { width } = Dimensions.get('window');
 
@@ -29,12 +31,64 @@ export default function RegisterScreen() {
   const [isEmailVerified, setIsEmailVerified] = useState(false);
   const [isSendingCode, setIsSendingCode] = useState(false);
   const [isVerifyingCode, setIsVerifyingCode] = useState(false);
+  const [isSigningUp, setIsSigningUp] = useState(false);
 
   const totalSteps = 6;
 
-  const handleNext = () => {
+  const handleNext = async () => {
     if (currentStep < totalSteps) {
-      setCurrentStep(currentStep + 1);
+      // 마지막 단계에서 회원가입 API 호출
+      if (currentStep === 5) {
+        await handleSignUp();
+      } else {
+        setCurrentStep(currentStep + 1);
+      }
+    }
+  };
+
+  const handleSignUp = async () => {
+    try {
+      setIsSigningUp(true);
+
+      const signUpData: SignUpRequest = {
+        email,
+        password,
+        name: nickname,
+        avatarKey: profileImage ? 'profile_image' : 'default_avatar', // 임시로 기본값 설정
+        avatarVersion: 0,
+      };
+
+      console.log('회원가입 데이터:', signUpData);
+
+      const response = await signUp(signUpData);
+
+      // 토큰 저장
+      await saveTokens({
+        accessToken: response.accessToken,
+        refreshToken: response.refreshToken,
+        loginType: 'email',
+      });
+
+      console.log('회원가입 성공, 토큰 저장 완료');
+
+      // 다음 단계로 이동 (완료 화면)
+      setCurrentStep(6);
+    } catch (error: any) {
+      console.error('회원가입 실패:', error);
+
+      let errorMessage = '회원가입 중 오류가 발생했습니다.';
+
+      if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.response?.status === 400) {
+        errorMessage = '입력한 정보를 다시 확인해주세요.';
+      } else if (error.response?.status === 409) {
+        errorMessage = '이미 가입된 이메일입니다.';
+      }
+
+      Alert.alert('회원가입 실패', errorMessage);
+    } finally {
+      setIsSigningUp(false);
     }
   };
 
@@ -545,14 +599,21 @@ export default function RegisterScreen() {
             <TouchableOpacity
               style={[
                 styles.nextButton,
-                { backgroundColor: canProceed() ? '#39359F' : '#333333' },
+                {
+                  backgroundColor:
+                    canProceed() && !isSigningUp ? '#39359F' : '#333333',
+                },
               ]}
               onPress={handleNext}
-              disabled={!canProceed()}
+              disabled={!canProceed() || isSigningUp}
             >
-              <Text style={styles.nextButtonText}>
-                {currentStep === totalSteps ? '완료' : '다음'}
-              </Text>
+              {isSigningUp ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Text style={styles.nextButtonText}>
+                  {currentStep === totalSteps ? '완료' : '다음'}
+                </Text>
+              )}
             </TouchableOpacity>
           </View>
         )}

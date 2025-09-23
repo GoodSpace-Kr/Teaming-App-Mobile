@@ -157,9 +157,12 @@ export const useWebSocket = ({
         roomId,
         isConnected: status === 'connected',
         wsServiceExists: !!wsServiceRef.current,
+        status,
       });
 
-      if (wsServiceRef.current && roomId && status === 'connected') {
+      if (wsServiceRef.current && roomId) {
+        // 연결 상태와 관계없이 전송 시도 (STOMP가 자체적으로 처리)
+        console.log('🚀 메시지 전송 중...');
         wsServiceRef.current.sendTextMessage(roomId, content);
       } else {
         console.error('❌ 메시지 전송 실패:', {

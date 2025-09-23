@@ -168,6 +168,7 @@ export default function GoogleLoginWebView({
         await saveTokens({
           accessToken: res.data.accessToken,
           refreshToken: res.data.refreshToken,
+          loginType: 'google',
           user: res.data.user,
         });
 
