@@ -27,7 +27,7 @@ export default function CreateTeamScreen() {
   const [roomTitle, setRoomTitle] = useState('');
   const [subtitle, setSubtitle] = useState('');
   const [teamCount, setTeamCount] = useState(3);
-  const [selectedRoom, setSelectedRoom] = useState('basic');
+  const [selectedRoom, setSelectedRoom] = useState('demo');
   const [emails, setEmails] = useState(['', '', '']);
   const [roomImage, setRoomImage] = useState<string | null>(null);
 
@@ -71,7 +71,11 @@ export default function CreateTeamScreen() {
         title: roomTitle.trim(),
         description: subtitle.trim(),
         memberCount: teamCount,
-        roomType: selectedRoom.toUpperCase() as 'BASIC' | 'PREMIUM' | 'ELITE',
+        roomType: selectedRoom.toUpperCase() as
+          | 'DEMO'
+          | 'BASIC'
+          | 'STANDARD'
+          | 'ELITE',
         // 이미지가 있으면 imageKey 설정, 없으면 undefined
         imageKey: roomImage ? `team-image-${Date.now()}` : undefined,
         imageVersion: roomImage ? 1 : undefined,
@@ -160,6 +164,14 @@ export default function CreateTeamScreen() {
   }, [teamCount]);
 
   const roomTypes = [
+    {
+      id: 'demo',
+      name: 'Demo Room',
+      price: '0',
+      benefit: '무료로 서비스를 이용해 보십시오.',
+      logo: require('../../../assets/images/logo.png'),
+      color: '#FFFFFF',
+    },
     {
       id: 'basic',
       name: 'Basic Room',
@@ -284,7 +296,9 @@ export default function CreateTeamScreen() {
               <TouchableOpacity
                 key={room.id}
                 style={[
-                  room.id === 'elite'
+                  room.id === 'demo'
+                    ? styles.demoRoomCard
+                    : room.id === 'elite'
                     ? styles.eliteRoomCard
                     : room.id === 'standard'
                     ? styles.standardRoomCard
@@ -298,6 +312,7 @@ export default function CreateTeamScreen() {
                     <Text
                       style={[
                         styles.roomName,
+                        room.id === 'demo' && styles.demoRoomName,
                         room.id === 'elite' && styles.eliteRoomName,
                         room.id === 'standard' && styles.standardRoomName,
                       ]}
@@ -452,6 +467,17 @@ const styles = StyleSheet.create({
     borderColor: '#292929',
     padding: 16,
   },
+  demoRoomCard: {
+    backgroundColor: '#121216',
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 16,
+    shadowColor: '#4A90E2',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
   eliteRoomCard: {
     backgroundColor: '#121216',
     borderRadius: 16,
@@ -475,6 +501,15 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.5,
     shadowRadius: 10,
     elevation: 8,
+  },
+  demoRoomName: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#4A90E2', // 파란색
+    marginBottom: 6,
+    textShadowColor: '#4A90E2',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 8,
   },
   eliteRoomName: {
     fontSize: 18,

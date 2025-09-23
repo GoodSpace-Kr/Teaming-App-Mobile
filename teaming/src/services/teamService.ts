@@ -5,7 +5,7 @@ export interface CreateTeamRequest {
   title: string;
   description: string;
   memberCount: number;
-  roomType: 'BASIC' | 'PREMIUM' | 'ELITE';
+  roomType: 'DEMO' | 'BASIC' | 'STANDARD' | 'ELITE';
   imageKey?: string;
   imageVersion?: number;
 }
