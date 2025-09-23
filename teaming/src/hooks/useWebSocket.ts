@@ -53,13 +53,27 @@ export const useWebSocket = ({
 
   // 웹소켓 서비스 초기화
   useEffect(() => {
-    if (!jwt) return;
+    if (!jwt || jwt.trim() === '') {
+      console.warn('⚠️ JWT 토큰이 없어 웹소켓 연결을 시도하지 않습니다.');
+      return;
+    }
+
+    console.log('🔧 웹소켓 서비스 초기화:', {
+      jwtLength: jwt.length,
+      jwtPrefix: jwt.substring(0, 20) + '...',
+      roomId,
+    });
 
     wsServiceRef.current = new WebSocketService(jwt);
 
     // 상태 변경 리스너 등록
     unsubscribeRef.current = wsServiceRef.current.onStatusChange(
       (newStatus) => {
+        console.log('🔄 웹소켓 상태 변경:', {
+          from: status,
+          to: newStatus,
+          isConnected: newStatus === 'connected',
+        });
         setStatus(newStatus);
         if (newStatus === 'error') {
           setError('웹소켓 연결에 문제가 발생했습니다.');
@@ -70,6 +84,7 @@ export const useWebSocket = ({
     );
 
     return () => {
+      console.log('🧹 웹소켓 서비스 정리 중...');
       if (unsubscribeRef.current) {
         unsubscribeRef.current();
       }
@@ -77,7 +92,7 @@ export const useWebSocket = ({
         wsServiceRef.current.disconnect();
       }
     };
-  }, [jwt]);
+  }, [jwt, roomId]);
 
   // 자동 연결
   useEffect(() => {
@@ -137,11 +152,25 @@ export const useWebSocket = ({
 
   const sendTextMessage = useCallback(
     (content: string) => {
-      if (wsServiceRef.current && roomId) {
+      console.log('📤 텍스트 메시지 전송 시도:', {
+        content,
+        roomId,
+        isConnected: status === 'connected',
+        wsServiceExists: !!wsServiceRef.current,
+      });
+
+      if (wsServiceRef.current && roomId && status === 'connected') {
         wsServiceRef.current.sendTextMessage(roomId, content);
+      } else {
+        console.error('❌ 메시지 전송 실패:', {
+          wsServiceExists: !!wsServiceRef.current,
+          roomId,
+          status,
+          isConnected: status === 'connected',
+        });
       }
     },
-    [roomId]
+    [roomId, status]
   );
 
   const sendImageMessage = useCallback(

@@ -130,6 +130,13 @@ export default function ChatRoomScreen() {
   };
 
   const handleSendMessage = () => {
+    console.log('📤 메시지 전송 버튼 클릭:', {
+      inputText: inputText.trim(),
+      isConnected,
+      status,
+      wsError,
+    });
+
     if (inputText.trim() && isConnected) {
       sendTextMessage(inputText.trim());
       setInputText('');
@@ -139,6 +146,11 @@ export default function ChatRoomScreen() {
         scrollViewRef.current?.scrollToEnd({ animated: true });
       }, 100);
     } else if (!isConnected) {
+      console.error('❌ 웹소켓 연결 상태 문제:', {
+        isConnected,
+        status,
+        wsError,
+      });
       Alert.alert('연결 오류', '웹소켓이 연결되지 않았습니다.');
     }
   };

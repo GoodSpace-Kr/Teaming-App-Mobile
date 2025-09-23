@@ -92,16 +92,62 @@ export class WebSocketService {
   ) {
     this.jwt = jwt;
     const scheme = useTLS ? 'wss' : 'ws';
-    // Spring SockJS + STOMP 환경에서 순수 WebSocket 경로
+    // 다양한 경로 시도: /ws/websocket, /ws, /websocket
     const brokerURL = `${scheme}://${host}/ws/websocket`;
+
+    // JWT 토큰 디코딩해서 만료 시간 확인
+    try {
+      const payload = JSON.parse(atob(jwt.split('.')[1]));
+      const now = Math.floor(Date.now() / 1000);
+      const isExpired = payload.exp < now;
+
+      console.log('🔌 웹소켓 연결 설정:', {
+        brokerURL,
+        jwtLength: jwt.length,
+        jwtPrefix: jwt.substring(0, 20) + '...',
+        useTLS,
+        jwtPayload: {
+          sub: payload.sub,
+          exp: payload.exp,
+          iat: payload.iat,
+          isExpired,
+          expiresIn: payload.exp - now,
+        },
+      });
+
+      if (isExpired) {
+        console.error('❌ JWT 토큰이 만료되었습니다!');
+      }
+    } catch (error) {
+      console.error('❌ JWT 토큰 디코딩 실패:', error);
+    }
 
     this.client = new Client({
       brokerURL,
+      // 명세서에 따라 Authorization 헤더로 JWT 토큰 전송
       connectHeaders: {
         Authorization: `Bearer ${jwt}`,
       },
-      debug: (str) => console.log('[STOMP]', str),
-      reconnectDelay: 3000,
+      debug: (str) => {
+        console.log('[STOMP]', str);
+        // STOMP 연결 과정을 더 자세히 로깅
+        if (str.includes('CONNECTED')) {
+          console.log('🎉 STOMP CONNECTED 명령 수신됨!');
+        }
+        if (str.includes('ERROR')) {
+          console.log('❌ STOMP ERROR 명령 수신됨!');
+        }
+        if (str.includes('scheduling reconnection')) {
+          console.log('🔄 STOMP 재연결 스케줄링 중...');
+        }
+        if (str.includes('Web Socket Closed')) {
+          console.log('🔌 WebSocket 연결이 닫혔습니다.');
+        }
+        if (str.includes('Web Socket Error')) {
+          console.log('❌ WebSocket 에러 발생!');
+        }
+      },
+      reconnectDelay: 0, // 재연결 비활성화
       heartbeatIncoming: 10000,
       heartbeatOutgoing: 10000,
     });
@@ -110,23 +156,42 @@ export class WebSocketService {
   }
 
   private setupEventHandlers() {
-    this.client.onConnect = () => {
-      console.log('✅ 웹소켓 연결 성공');
+    this.client.onConnect = (frame) => {
+      console.log('✅ 웹소켓 연결 성공:', {
+        headers: frame.headers,
+      });
+      console.log('🔄 상태를 connected로 변경합니다.');
       this.setStatus('connected');
     };
 
     this.client.onStompError = (frame) => {
-      console.error('❌ STOMP 에러:', frame.headers['message'], frame.body);
+      console.error('❌ STOMP 에러 상세:', {
+        command: frame.command,
+        headers: frame.headers,
+        body: frame.body,
+        message: frame.headers['message'],
+        receipt: frame.headers['receipt'],
+      });
       this.setStatus('error');
     };
 
     this.client.onWebSocketError = (error) => {
-      console.error('❌ 웹소켓 에러:', error);
+      console.error('❌ 웹소켓 에러 상세:', {
+        type: error.type,
+        target: error.target?.url,
+        message: error.message,
+        code: error.code,
+        reason: error.reason,
+      });
       this.setStatus('error');
     };
 
-    this.client.onDisconnect = () => {
-      console.log('🔌 웹소켓 연결 해제');
+    this.client.onDisconnect = (frame) => {
+      console.log('🔌 웹소켓 연결 해제:', {
+        command: frame.command,
+        headers: frame.headers,
+        body: frame.body,
+      });
       this.setStatus('disconnected');
     };
   }
@@ -156,28 +221,65 @@ export class WebSocketService {
   connect(): Promise<void> {
     return new Promise((resolve, reject) => {
       if (this.status === 'connected') {
+        console.log('🔄 이미 연결된 상태입니다.');
         resolve();
         return;
       }
 
+      console.log('🚀 웹소켓 연결 시작...');
       this.setStatus('connecting');
 
-      const onConnect = () => {
-        this.client.off('connect', onConnect);
-        this.client.off('error', onError);
+      // STOMP 클라이언트는 이미 setupEventHandlers에서 이벤트 핸들러가 설정됨
+      // 연결 성공/실패는 onConnect, onStompError, onWebSocketError에서 처리됨
+
+      // 연결 성공을 감지하기 위한 임시 리스너
+      const originalOnConnect = this.client.onConnect;
+      const originalOnStompError = this.client.onStompError;
+      const originalOnWebSocketError = this.client.onWebSocketError;
+
+      this.client.onConnect = (frame: any) => {
+        console.log('✅ 웹소켓 연결 완료:', frame);
+        // 원래 핸들러도 호출
+        if (originalOnConnect) {
+          originalOnConnect(frame);
+        }
         resolve();
       };
 
-      const onError = (error: any) => {
-        this.client.off('connect', onConnect);
-        this.client.off('error', onError);
+      this.client.onStompError = (frame: any) => {
+        console.error('❌ STOMP 연결 실패:', frame);
+        // 원래 핸들러도 호출
+        if (originalOnStompError) {
+          originalOnStompError(frame);
+        }
+        reject(
+          new Error(
+            `STOMP Error: ${frame.headers['message'] || 'Unknown error'}`
+          )
+        );
+      };
+
+      this.client.onWebSocketError = (error: any) => {
+        console.error('❌ 웹소켓 연결 실패:', {
+          error,
+          type: error?.type,
+          message: error?.message,
+          code: error?.code,
+        });
+        // 원래 핸들러도 호출
+        if (originalOnWebSocketError) {
+          originalOnWebSocketError(error);
+        }
         reject(error);
       };
 
-      this.client.on('connect', onConnect);
-      this.client.on('error', onError);
-
-      this.client.activate();
+      try {
+        console.log('🔄 STOMP 클라이언트 활성화 중...');
+        this.client.activate();
+      } catch (error) {
+        console.error('❌ STOMP 클라이언트 활성화 실패:', error);
+        reject(error);
+      }
     });
   }
 
@@ -200,33 +302,44 @@ export class WebSocketService {
       onReadBoundary?: (update: ReadBoundaryUpdate) => void;
     }
   ) {
+    console.log(`📡 채팅방 ${roomId} 구독 시작...`);
+
     // 채팅 메시지 구독
     const messageSub = this.client.subscribe(
       `/topic/rooms/${roomId}`,
       (frame: IMessage) => {
         try {
+          console.log(`📨 채팅방 ${roomId} 메시지 수신:`, frame.body);
           const message: ChatMessage = JSON.parse(frame.body);
           handlers.onMessage?.(message);
         } catch (error) {
-          console.error('메시지 파싱 에러:', error);
+          console.error('메시지 파싱 에러:', error, '원본 데이터:', frame.body);
         }
       }
     );
     this.subscriptions.push(messageSub);
+    console.log(`✅ 채팅 메시지 구독 완료: /topic/rooms/${roomId}`);
 
     // 읽음 경계 업데이트 구독
     const readSub = this.client.subscribe(
       `/topic/rooms/${roomId}/read`,
       (frame: IMessage) => {
         try {
+          console.log(`📖 채팅방 ${roomId} 읽음 경계 업데이트:`, frame.body);
           const update: ReadBoundaryUpdate = JSON.parse(frame.body);
           handlers.onReadBoundary?.(update);
         } catch (error) {
-          console.error('읽음 경계 파싱 에러:', error);
+          console.error(
+            '읽음 경계 파싱 에러:',
+            error,
+            '원본 데이터:',
+            frame.body
+          );
         }
       }
     );
     this.subscriptions.push(readSub);
+    console.log(`✅ 읽음 경계 구독 완료: /topic/rooms/${roomId}/read`);
   }
 
   // 개인 큐 구독
@@ -273,13 +386,22 @@ export class WebSocketService {
       clientMessageId: nanoid(),
     };
 
-    this.client.publish({
+    console.log(`📤 채팅방 ${roomId}에 메시지 전송:`, {
       destination: `/app/rooms/${roomId}/send`,
-      body: JSON.stringify(message),
-      headers: { 'content-type': 'application/json' },
+      message,
+      roomId,
     });
 
-    console.log('📤 메시지 전송:', message);
+    try {
+      this.client.publish({
+        destination: `/app/rooms/${roomId}/send`,
+        body: JSON.stringify(message),
+        headers: { 'content-type': 'application/json' },
+      });
+      console.log('✅ 메시지 전송 성공');
+    } catch (error) {
+      console.error('❌ 메시지 전송 실패:', error);
+    }
   }
 
   // 텍스트 메시지 전송 (편의 메서드)
