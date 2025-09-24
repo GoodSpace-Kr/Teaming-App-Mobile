@@ -74,8 +74,8 @@ export default function ChatsScreen() {
     fetchChatRooms();
   }, [retryKey]);
 
-  const handleEnterChatRoom = (roomId: number) => {
-    router.push(`/(tabs)/chats/chat-room/${roomId}`);
+  const handleEnterChatRoom = (roomId: number, role: 'LEADER' | 'MEMBER') => {
+    router.push(`/(tabs)/chats/chat-room/${roomId}?role=${role}`);
   };
 
   // 시간 포맷팅 함수
@@ -140,7 +140,7 @@ export default function ChatsScreen() {
             <TouchableOpacity
               key={room.roomId}
               style={styles.chatRoomCard}
-              onPress={() => handleEnterChatRoom(room.roomId)}
+              onPress={() => handleEnterChatRoom(room.roomId, room.role)}
             >
               <View style={styles.chatRoomContent}>
                 {/* 채팅방 아이콘 */}
@@ -172,9 +172,17 @@ export default function ChatsScreen() {
 
                 <View style={styles.roomInfo}>
                   <View style={styles.roomTitleRow}>
-                    <Text style={styles.roomTitle} numberOfLines={1}>
-                      {room.title}
-                    </Text>
+                    <View style={styles.titleContainer}>
+                      <Text style={styles.roomTitle} numberOfLines={1}>
+                        {room.title}
+                      </Text>
+                      {room.role === 'LEADER' && (
+                        <View style={styles.leaderBadge}>
+                          <Ionicons name="star" size={12} color="#FFD700" />
+                          <Text style={styles.leaderText}>팀장</Text>
+                        </View>
+                      )}
+                    </View>
                     <Text style={styles.memberCount}>{room.memberCount}명</Text>
                   </View>
 
@@ -362,6 +370,25 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 4,
+  },
+  titleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  leaderBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFD700',
+    borderRadius: 8,
+    paddingVertical: 2,
+    marginLeft: 8,
+    marginBottom: 5,
+    paddingRight: 11,
+  },
+  leaderText: {
+    fontSize: 10,
+    color: '#000000',
+    fontWeight: '600',
   },
   memberCount: {
     fontSize: 12,

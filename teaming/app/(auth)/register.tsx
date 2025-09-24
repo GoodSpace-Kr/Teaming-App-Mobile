@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -17,6 +17,7 @@ import { router } from 'expo-router';
 import { sendEmailCode, verifyEmailCode } from '../../src/services/emailAuth';
 import { signUp, SignUpRequest } from '../../src/services/api';
 import { saveTokens } from '../../src/services/tokenManager';
+import { AvatarService } from '../../src/services/avatarService';
 
 const { width } = Dimensions.get('window');
 
@@ -32,8 +33,42 @@ export default function RegisterScreen() {
   const [isSendingCode, setIsSendingCode] = useState(false);
   const [isVerifyingCode, setIsVerifyingCode] = useState(false);
   const [isSigningUp, setIsSigningUp] = useState(false);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const [avatarUploadComplete, setAvatarUploadComplete] = useState(false);
 
   const totalSteps = 6;
+
+  // 완료 화면에서 아바타 업로드 처리
+  const handleAvatarUpload = useCallback(async () => {
+    if (!profileImage || avatarUploadComplete || isUploadingAvatar) return;
+
+    try {
+      setIsUploadingAvatar(true);
+      console.log('🚀 완료 화면에서 프로필 이미지 S3 업로드 시작');
+
+      const avatarResult = await AvatarService.uploadAvatar(profileImage);
+      console.log('✅ 프로필 이미지 S3 업로드 완료:', avatarResult);
+
+      setAvatarUploadComplete(true);
+    } catch (uploadError) {
+      console.error('❌ 프로필 이미지 업로드 실패:', uploadError);
+      // 업로드 실패해도 사용자 경험을 해치지 않음
+    } finally {
+      setIsUploadingAvatar(false);
+    }
+  }, [profileImage, avatarUploadComplete, isUploadingAvatar]);
+
+  // 완료 화면에서 아바타 업로드 자동 시작 (한 번만 실행)
+  useEffect(() => {
+    if (
+      currentStep === 6 &&
+      profileImage &&
+      !avatarUploadComplete &&
+      !isUploadingAvatar
+    ) {
+      handleAvatarUpload();
+    }
+  }, [currentStep]); // currentStep만 의존성으로 설정
 
   const handleNext = async () => {
     if (currentStep < totalSteps) {
@@ -50,11 +85,12 @@ export default function RegisterScreen() {
     try {
       setIsSigningUp(true);
 
+      // 먼저 기본 아바타로 회원가입
       const signUpData: SignUpRequest = {
         email,
         password,
         name: nickname,
-        avatarKey: profileImage ? 'profile_image' : 'default_avatar', // 임시로 기본값 설정
+        avatarKey: 'default_avatar',
         avatarVersion: 0,
       };
 
@@ -523,6 +559,26 @@ export default function RegisterScreen() {
       <Text style={styles.completionMessage}>
         새로운 회원님, Teaming에 가입해주셔서 감사합니다!
       </Text>
+
+      {/* 아바타 업로드 상태 표시 */}
+      {profileImage && (
+        <View style={styles.avatarUploadStatus}>
+          {isUploadingAvatar && (
+            <View style={styles.uploadingContainer}>
+              <ActivityIndicator size="small" color="#514EAC" />
+              <Text style={styles.uploadingText}>
+                프로필 이미지 업로드 중...
+              </Text>
+            </View>
+          )}
+          {avatarUploadComplete && (
+            <Text style={styles.uploadCompleteText}>
+              ✅ 프로필 이미지 업로드 완료!
+            </Text>
+          )}
+        </View>
+      )}
+
       <Text style={styles.completionSubMessage}>
         이제 모든 기능을 이용하실 수 있습니다.
       </Text>
@@ -916,5 +972,32 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     color: '#FFFFFF',
+  },
+
+  // 아바타 업로드 상태 스타일
+  avatarUploadStatus: {
+    marginVertical: 16,
+    alignItems: 'center',
+  },
+  uploadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1A1A1A',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#514EAC',
+  },
+  uploadingText: {
+    fontSize: 14,
+    color: '#514EAC',
+    marginLeft: 8,
+    fontWeight: '500',
+  },
+  uploadCompleteText: {
+    fontSize: 14,
+    color: '#34C759',
+    fontWeight: '500',
   },
 });

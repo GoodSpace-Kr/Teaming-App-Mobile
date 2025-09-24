@@ -17,6 +17,8 @@ import { Ionicons } from '@expo/vector-icons';
 import {
   searchRoomByInviteCode,
   RoomSearchResponse,
+  joinTeamByInviteCode,
+  JoinTeamResponse,
 } from '../../../src/services/teamService';
 
 const { width } = Dimensions.get('window');
@@ -36,6 +38,7 @@ export default function JoinTeamScreen() {
   const [roomCode, setRoomCode] = useState('');
   const [foundRoom, setFoundRoom] = useState<FoundRoom | null>(null);
   const [isSearching, setIsSearching] = useState(false);
+  const [isJoining, setIsJoining] = useState(false);
 
   const handleBackPress = () => {
     router.back();
@@ -81,17 +84,55 @@ export default function JoinTeamScreen() {
     }
   };
 
-  const handleEnter = () => {
-    console.log('입장 버튼 클릭');
-    // Modal 닫기
-    router.dismiss();
-    // 약간의 지연 후 채팅방 목록을 거쳐서 채팅방으로 이동 (팀원으로)
-    setTimeout(() => {
-      router.push('/(tabs)/chats');
+  const handleEnter = async () => {
+    if (!roomCode.trim()) {
+      Alert.alert('오류', '초대코드를 입력해주세요.');
+      return;
+    }
+
+    try {
+      setIsJoining(true);
+      console.log('🚀 팀 참여 시도:', roomCode);
+
+      // 초대코드로 팀 참여 API 호출
+      const joinResponse = await joinTeamByInviteCode({
+        inviteCode: roomCode.trim(),
+      });
+
+      console.log('✅ 팀 참여 성공:', joinResponse);
+
+      // Modal 닫기
+      router.dismiss();
+
+      // 채팅방 목록으로 이동 (새로운 방이 목록에 추가됨)
       setTimeout(() => {
-        router.push('/(tabs)/chats/chat-room/1?isLeader=false');
+        router.push('/(tabs)/chats');
+        // 참여한 채팅방으로 바로 이동
+        setTimeout(() => {
+          router.push(
+            `/(tabs)/chats/chat-room/${joinResponse.roomId}?role=${joinResponse.role}`
+          );
+        }, 100);
       }, 100);
-    }, 100);
+    } catch (error: any) {
+      console.error('❌ 팀 참여 실패:', error);
+
+      let errorMessage = '팀 참여에 실패했습니다.';
+
+      if (error.response?.status === 400) {
+        errorMessage = '올바르지 않은 초대코드입니다.';
+      } else if (error.response?.status === 404) {
+        errorMessage = '존재하지 않는 팀입니다.';
+      } else if (error.response?.status === 409) {
+        errorMessage = '이미 참여한 팀입니다.';
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      }
+
+      Alert.alert('팀 참여 실패', errorMessage);
+    } finally {
+      setIsJoining(false);
+    }
   };
 
   return (
@@ -147,10 +188,18 @@ export default function JoinTeamScreen() {
                 <Text style={styles.roomSubtitle}>{foundRoom.subtitle}</Text>
               </View>
               <TouchableOpacity
-                style={styles.enterButton}
+                style={[
+                  styles.enterButton,
+                  isJoining && styles.enterButtonDisabled,
+                ]}
                 onPress={handleEnter}
+                disabled={isJoining}
               >
-                <Text style={styles.enterButtonText}>입장</Text>
+                {isJoining ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.enterButtonText}>입장</Text>
+                )}
               </TouchableOpacity>
             </View>
 
@@ -310,6 +359,10 @@ const styles = StyleSheet.create({
     borderColor: '#292929',
     paddingHorizontal: 20,
     paddingVertical: 12,
+  },
+  enterButtonDisabled: {
+    backgroundColor: '#333333',
+    borderColor: '#555555',
   },
   enterButtonText: {
     fontSize: 16,

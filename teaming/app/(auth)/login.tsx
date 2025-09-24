@@ -17,6 +17,7 @@ import * as SecureStore from 'expo-secure-store';
 import KakaoLoginWebView from '../../src/components/KakaoLoginWebView';
 import GoogleLoginWebView from '../../src/components/GoogleLoginWebView';
 import NaverLoginWebView from '../../src/components/NaverLoginWebView';
+import AppleLoginButton from '../../src/components/AppleLoginButton';
 import { login, LoginRequest } from '../../src/services/api';
 import { saveTokens } from '../../src/services/tokenManager';
 
@@ -181,6 +182,23 @@ export default function LoginScreen() {
     Alert.alert('로그인 실패', error);
   };
 
+  const handleAppleLoginSuccess = async (result: any) => {
+    try {
+      console.log('✅ 애플 로그인 성공:', result);
+
+      // 메인 화면으로 이동 (토큰은 이미 AppleLoginButton에서 저장됨)
+      router.replace('/(tabs)');
+    } catch (error) {
+      console.error('로그인 성공 처리 에러:', error);
+      Alert.alert('오류', '로그인 처리 중 오류가 발생했습니다.');
+    }
+  };
+
+  const handleAppleLoginError = (error: string) => {
+    console.error('❌ 애플 로그인 에러:', error);
+    Alert.alert('로그인 실패', error);
+  };
+
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
@@ -270,15 +288,10 @@ export default function LoginScreen() {
             )}
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.socialButton, styles.appleButton]}
-            onPress={() => handleSocialLogin('apple')}
-          >
-            <Image
-              source={require('../../assets/images/(social)/Apple.png')}
-              style={styles.socialIcon}
-            />
-          </TouchableOpacity>
+          <AppleLoginButton
+            onLoginSuccess={handleAppleLoginSuccess}
+            onLoginError={handleAppleLoginError}
+          />
 
           <TouchableOpacity
             style={[styles.socialButton, styles.googleButton]}

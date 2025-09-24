@@ -23,6 +23,8 @@ import ChatBubble from '@/src/components/ChatBubble';
 import { useWebSocket } from '@/src/hooks/useWebSocket';
 import { getAccessToken } from '@/src/services/tokenManager';
 import { ChatMessage } from '@/src/services/websocketService';
+import { FileService } from '@/src/services/fileService';
+import { UploadProgress } from '@/src/types/file';
 
 const { width, height } = Dimensions.get('window');
 
@@ -45,12 +47,24 @@ interface ChatRoomData {
 }
 
 export default function ChatRoomScreen() {
-  const { id, isLeader } = useLocalSearchParams();
+  const { id, role } = useLocalSearchParams<{ id: string; role?: string }>();
   const [inputText, setInputText] = useState('');
   const [showFileMenu, setShowFileMenu] = useState(false);
   const [jwt, setJwt] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(
+    null
+  );
   const scrollViewRef = useRef<ScrollView>(null);
+
+  // role 정보 로깅
+  useEffect(() => {
+    if (role) {
+      console.log('👑 채팅방에서 사용자 역할:', role);
+      console.log('🏠 채팅방 ID:', id);
+    }
+  }, [role, id]);
 
   // JWT 토큰 가져오기
   useEffect(() => {
@@ -123,7 +137,7 @@ export default function ChatRoomScreen() {
 
   const handleMenuPress = () => {
     // URL 파라미터에서 팀장 여부 확인
-    const isTeamLeader = isLeader === 'true';
+    const isTeamLeader = role === 'LEADER';
     router.push(
       `/(tabs)/chats/chat-menu?roomId=${id}&isLeader=${isTeamLeader}`
     );
@@ -161,15 +175,20 @@ export default function ChatRoomScreen() {
       if (!result.canceled && result.assets[0]) {
         const asset = result.assets[0];
         if (isConnected) {
-          // TODO: 파일 업로드 후 sendImageMessage 호출
-          sendImageMessage(asset.fileName || '이미지', []);
-          Alert.alert('이미지 전송', '이미지가 전송되었습니다.');
+          await uploadAndSendFile(
+            asset.uri,
+            asset.fileName || '이미지',
+            asset.type || 'image/jpeg',
+            asset.fileSize || 0,
+            'image'
+          );
         } else {
           Alert.alert('연결 오류', '웹소켓이 연결되지 않았습니다.');
         }
         setShowFileMenu(false);
       }
     } catch (error) {
+      console.error('이미지 선택 오류:', error);
       Alert.alert('오류', '이미지를 선택하는 중 오류가 발생했습니다.');
     }
   };
@@ -185,15 +204,20 @@ export default function ChatRoomScreen() {
       if (!result.canceled && result.assets[0]) {
         const asset = result.assets[0];
         if (isConnected) {
-          // TODO: 파일 업로드 후 sendFileMessage 호출
-          sendFileMessage(asset.fileName || '동영상', []);
-          Alert.alert('동영상 전송', '동영상이 전송되었습니다.');
+          await uploadAndSendFile(
+            asset.uri,
+            asset.fileName || '동영상',
+            asset.type || 'video/mp4',
+            asset.fileSize || 0,
+            'video'
+          );
         } else {
           Alert.alert('연결 오류', '웹소켓이 연결되지 않았습니다.');
         }
         setShowFileMenu(false);
       }
     } catch (error) {
+      console.error('동영상 선택 오류:', error);
       Alert.alert('오류', '동영상을 선택하는 중 오류가 발생했습니다.');
     }
   };
@@ -208,16 +232,82 @@ export default function ChatRoomScreen() {
       if (!result.canceled && result.assets[0]) {
         const asset = result.assets[0];
         if (isConnected) {
-          // TODO: 파일 업로드 후 sendFileMessage 호출
-          sendFileMessage(asset.name, []);
-          Alert.alert('파일 전송', '파일이 전송되었습니다.');
+          await uploadAndSendFile(
+            asset.uri,
+            asset.name,
+            asset.mimeType || 'application/octet-stream',
+            asset.size || 0,
+            'document'
+          );
         } else {
           Alert.alert('연결 오류', '웹소켓이 연결되지 않았습니다.');
         }
         setShowFileMenu(false);
       }
     } catch (error) {
+      console.error('문서 선택 오류:', error);
       Alert.alert('오류', '파일을 선택하는 중 오류가 발생했습니다.');
+    }
+  };
+
+  // 파일 업로드 및 전송 통합 함수
+  const uploadAndSendFile = async (
+    fileUri: string,
+    fileName: string,
+    contentType: string,
+    fileSize: number,
+    fileType: 'image' | 'video' | 'document'
+  ) => {
+    try {
+      setIsUploading(true);
+      setUploadProgress({ loaded: 0, total: fileSize, percentage: 0 });
+
+      console.log('📤 파일 업로드 시작:', {
+        fileName,
+        contentType,
+        fileSize: FileService.formatFileSize(fileSize),
+        fileType,
+      });
+
+      // S3에 파일 업로드
+      const fileId = await FileService.uploadFile(
+        Number(id),
+        fileUri,
+        fileName,
+        contentType,
+        fileSize,
+        (progress) => {
+          setUploadProgress(progress);
+          console.log(`📊 업로드 진행률: ${progress.percentage.toFixed(1)}%`);
+        }
+      );
+
+      console.log('✅ 파일 업로드 완료, fileId:', fileId);
+
+      // 웹소켓으로 파일 메시지 전송
+      if (fileType === 'image') {
+        sendImageMessage(fileName, [fileId]);
+      } else {
+        sendFileMessage(fileName, [fileId]);
+      }
+
+      Alert.alert('전송 완료', `${fileName}이(가) 전송되었습니다.`);
+
+      // 스크롤을 맨 아래로
+      setTimeout(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+    } catch (error: any) {
+      console.error('❌ 파일 업로드 실패:', error);
+      Alert.alert(
+        '업로드 실패',
+        `파일 업로드 중 오류가 발생했습니다.\n${
+          error.message || '알 수 없는 오류'
+        }`
+      );
+    } finally {
+      setIsUploading(false);
+      setUploadProgress(null);
     }
   };
 
@@ -394,6 +484,7 @@ export default function ChatRoomScreen() {
               <TouchableOpacity
                 style={styles.fileMenuOption}
                 onPress={handleImagePicker}
+                disabled={isUploading}
               >
                 <View style={styles.fileMenuIcon}>
                   <Ionicons name="image" size={24} color="#FF2D92" />
@@ -404,6 +495,7 @@ export default function ChatRoomScreen() {
               <TouchableOpacity
                 style={styles.fileMenuOption}
                 onPress={handleVideoPicker}
+                disabled={isUploading}
               >
                 <View style={styles.fileMenuIcon}>
                   <Ionicons name="videocam" size={24} color="#AF52DE" />
@@ -414,6 +506,7 @@ export default function ChatRoomScreen() {
               <TouchableOpacity
                 style={styles.fileMenuOption}
                 onPress={handleDocumentPicker}
+                disabled={isUploading}
               >
                 <View style={styles.fileMenuIcon}>
                   <Ionicons name="document" size={24} color="#007AFF" />
@@ -422,6 +515,31 @@ export default function ChatRoomScreen() {
               </TouchableOpacity>
             </View>
           </TouchableOpacity>
+        </Modal>
+
+        {/* 업로드 진행률 모달 */}
+        <Modal visible={isUploading} transparent={true} animationType="fade">
+          <View style={styles.uploadModalOverlay}>
+            <View style={styles.uploadModalContainer}>
+              <ActivityIndicator size="large" color="#007AFF" />
+              <Text style={styles.uploadModalTitle}>파일 업로드 중...</Text>
+              {uploadProgress && (
+                <View style={styles.progressContainer}>
+                  <View style={styles.progressBar}>
+                    <View
+                      style={[
+                        styles.progressFill,
+                        { width: `${uploadProgress.percentage}%` },
+                      ]}
+                    />
+                  </View>
+                  <Text style={styles.progressText}>
+                    {uploadProgress.percentage.toFixed(1)}%
+                  </Text>
+                </View>
+              )}
+            </View>
+          </View>
         </Modal>
       </KeyboardAvoidingView>
     </View>
@@ -629,5 +747,51 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#FFFFFF',
     fontWeight: '600',
+  },
+
+  // 업로드 진행률 모달
+  uploadModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  uploadModalContainer: {
+    backgroundColor: '#121216',
+    borderRadius: 16,
+    padding: 24,
+    alignItems: 'center',
+    minWidth: 200,
+    borderWidth: 1,
+    borderColor: '#292929',
+  },
+  uploadModalTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    marginTop: 16,
+    marginBottom: 20,
+  },
+  progressContainer: {
+    width: '100%',
+    alignItems: 'center',
+  },
+  progressBar: {
+    width: '100%',
+    height: 8,
+    backgroundColor: '#292929',
+    borderRadius: 4,
+    overflow: 'hidden',
+    marginBottom: 8,
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: '#007AFF',
+    borderRadius: 4,
+  },
+  progressText: {
+    fontSize: 14,
+    color: '#CCCCCC',
+    fontWeight: '500',
   },
 });

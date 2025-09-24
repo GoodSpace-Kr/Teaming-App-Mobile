@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,116 +7,84 @@ import {
   TouchableOpacity,
   Image,
   Dimensions,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { TaskService } from '@/src/services/taskService';
+import { Task, TaskWithMembers, TaskMember } from '@/src/types/task';
 
 const { width } = Dimensions.get('window');
 
-interface AssignedMember {
-  id: number;
-  name: string;
-  avatar: any;
-  hasSubmitted: boolean;
-  submittedAt?: string;
-}
-
-interface Task {
-  id: number;
-  title: string;
-  description: string;
-  deadline: string;
-  assignedMembers: AssignedMember[];
-  status: 'pending' | 'submitted';
-  createdBy: string;
-  createdAt: string;
-}
-
 export default function TaskListScreen() {
-  // 목데이터 - 실제 API 연동 시 대체
-  const [tasks] = useState<Task[]>([
-    {
-      id: 1,
+  const { roomId } = useLocalSearchParams<{ roomId: string }>();
+  const [tasks, setTasks] = useState<TaskWithMembers[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isLeader, setIsLeader] = useState(true); // TODO: 실제 사용자 권한에서 가져오기
+
+  // 멤버 정보 매핑 (실제로는 API에서 가져와야 함)
+  const memberMap = new Map<number, TaskMember>([
+    [1, { id: 1, name: '권민석', hasSubmitted: false }],
+    [2, { id: 2, name: '정치학존잘남', hasSubmitted: false }],
+    [3, { id: 3, name: '팀플하기싫다', hasSubmitted: false }],
+    [4, { id: 4, name: '최순조(팀장)', hasSubmitted: false }],
+  ]);
+
+  // 과제 목록 로드
+  useEffect(() => {
+    loadTasks();
+  }, [roomId]);
+
+  const loadTasks = async () => {
+    try {
+      setIsLoading(true);
+      console.log('🚀 과제 목록 로드:', { roomId });
+
+      const tasks = await TaskService.getTasks(Number(roomId));
+
+      // 백엔드 Task를 UI용 TaskWithMembers로 변환
+      const transformedTasks = tasks.map((task) =>
+        TaskService.transformTaskForUI(task, memberMap)
+      );
+
+      setTasks(transformedTasks);
+
+      console.log('✅ 과제 목록 로드 성공:', transformedTasks.length, '개');
+    } catch (error: any) {
+      console.error('❌ 과제 목록 로드 실패:', error);
+      Alert.alert('로드 실패', '과제 목록을 불러오는 중 오류가 발생했습니다.');
+      // API 실패 시 목데이터 사용
+      useMockData();
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // API 실패 시 목데이터 사용
+  const useMockData = () => {
+    const mockTask: Task = {
+      assignmentId: 1,
       title: '자료조사 2명 과제부여',
       description: '자료조사를 하겠다고 한 2명에게 과제를 부여합니다.',
-      deadline: '2025년 9월 7일 07:00',
-      assignedMembers: [
+      assignedMemberIds: [1, 2],
+      due: '2025-09-07T07:00:00.000Z',
+      status: 'IN_PROGRESS',
+      submissions: [
         {
-          id: 1,
-          name: '권민석',
-          avatar: require('../../../assets/images/(chattingRoom)/me.png'),
-          hasSubmitted: true,
-          submittedAt: '2025년 09월 06일 16:45',
-        },
-        {
-          id: 2,
-          name: '정치학존잘남',
-          avatar: require('../../../assets/images/(chattingRoom)/politicMan.png'),
-          hasSubmitted: false,
+          submitterId: 1,
+          description: '자료조사 완료했습니다.',
+          createdAt: '2025-09-06T16:45:00.000Z',
+          updatedAt: '2025-09-06T16:45:00.000Z',
+          files: [],
         },
       ],
-      status: 'pending',
-      createdBy: '최순조(팀장)',
-      createdAt: '2025년 9월 6일 15:30',
-    },
-    {
-      id: 2,
-      title: '발표 자료 준비',
-      description: '다음 주 발표를 위한 PPT 자료를 준비해주세요.',
-      deadline: '2025년 9월 10일 18:00',
-      assignedMembers: [
-        {
-          id: 1,
-          name: '권민석',
-          avatar: require('../../../assets/images/(chattingRoom)/me.png'),
-          hasSubmitted: false,
-        },
-        {
-          id: 3,
-          name: '팀플하기싫다',
-          avatar: require('../../../assets/images/(chattingRoom)/noTeample.png'),
-          hasSubmitted: true,
-          submittedAt: '2025년 09월 08일 14:20',
-        },
-      ],
-      status: 'pending',
-      createdBy: '최순조(팀장)',
-      createdAt: '2025년 9월 7일 09:15',
-    },
-    {
-      id: 3,
-      title: '최종 보고서 작성',
-      description: '프로젝트 최종 보고서를 작성해주세요.',
-      deadline: '2025년 9월 15일 23:59',
-      assignedMembers: [
-        {
-          id: 1,
-          name: '권민석',
-          avatar: require('../../../assets/images/(chattingRoom)/me.png'),
-          hasSubmitted: true,
-          submittedAt: '2025년 09월 14일 20:30',
-        },
-        {
-          id: 2,
-          name: '정치학존잘남',
-          avatar: require('../../../assets/images/(chattingRoom)/politicMan.png'),
-          hasSubmitted: true,
-          submittedAt: '2025년 09월 15일 15:45',
-        },
-        {
-          id: 3,
-          name: '팀플하기싫다',
-          avatar: require('../../../assets/images/(chattingRoom)/noTeample.png'),
-          hasSubmitted: true,
-          submittedAt: '2025년 09월 15일 18:20',
-        },
-      ],
-      status: 'submitted',
-      createdBy: '최순조(팀장)',
-      createdAt: '2025년 9월 10일 11:00',
-    },
-  ]);
+    };
+
+    const transformedTask = TaskService.transformTaskForUI(mockTask, memberMap);
+    setTasks([transformedTask]);
+  };
 
   const handleBackPress = () => {
     router.back();
@@ -126,51 +94,75 @@ export default function TaskListScreen() {
     router.push(`/(tabs)/chats/view-task?id=${taskId}`);
   };
 
-  const getTaskStatus = (task: Task) => {
-    const totalMembers = task.assignedMembers.length;
-    const submittedMembers = task.assignedMembers.filter(
-      (m) => m.hasSubmitted
-    ).length;
+  const handleDeleteTask = async (task: TaskWithMembers) => {
+    Alert.alert(
+      '과제 삭제',
+      `"${task.title}" 과제를 삭제하시겠습니까?\n\n삭제된 과제는 복구할 수 없습니다.`,
+      [
+        {
+          text: '취소',
+          style: 'cancel',
+        },
+        {
+          text: '삭제',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              console.log('🗑️ 과제 삭제:', task.assignmentId, task.title);
+              await TaskService.deleteTask(task.assignmentId);
 
-    if (submittedMembers === 0) {
-      return { text: '미시작', color: '#FF3B30', progress: 0 };
-    } else if (submittedMembers === totalMembers) {
-      return { text: '완료', color: '#4CAF50', progress: 100 };
-    } else {
-      return {
-        text: `${submittedMembers}/${totalMembers} 제출`,
-        color: '#FF9500',
-        progress: (submittedMembers / totalMembers) * 100,
-      };
-    }
+              // 목록에서 제거
+              setTasks((prev) =>
+                prev.filter((t) => t.assignmentId !== task.assignmentId)
+              );
+
+              Alert.alert('삭제 완료', '과제가 삭제되었습니다.');
+            } catch (error: any) {
+              console.error('❌ 과제 삭제 실패:', error);
+              Alert.alert(
+                '삭제 실패',
+                `과제 삭제 중 오류가 발생했습니다.\n${
+                  error.message || '알 수 없는 오류'
+                }`
+              );
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const getTaskStatus = (task: TaskWithMembers) => {
+    return TaskService.getTaskStatus(task);
   };
 
   const formatDate = (dateString: string) => {
-    // 간단한 날짜 포맷팅 (실제로는 더 정교한 로직 필요)
-    return dateString.split(' ')[0]; // "2025년 9월 7일" 부분만 추출
+    // ISO 8601 형식의 날짜를 사용자 친화적 형식으로 변환
+    return TaskService.formatDateFromISO(dateString);
   };
 
-  const renderTaskItem = (task: Task) => {
+  const renderTaskItem = (task: TaskWithMembers) => {
     const status = getTaskStatus(task);
 
     return (
       <TouchableOpacity
-        key={task.id}
+        key={task.assignmentId}
         style={styles.taskItem}
-        onPress={() => handleTaskPress(task.id)}
+        onPress={() => handleTaskPress(task.assignmentId)}
       >
         <View style={styles.taskHeader}>
           <Text style={styles.taskTitle} numberOfLines={1}>
             {task.title}
           </Text>
-          <View style={styles.taskStatus}>
-            <View
-              style={[styles.statusDot, { backgroundColor: status.color }]}
-            />
-            <Text style={[styles.statusText, { color: status.color }]}>
-              {status.text}
-            </Text>
-          </View>
+          {/* 팀장만 삭제 버튼 표시 */}
+          {isLeader && (
+            <TouchableOpacity
+              style={styles.deleteButton}
+              onPress={() => handleDeleteTask(task)}
+            >
+              <Ionicons name="trash-outline" size={16} color="#FF3B30" />
+            </TouchableOpacity>
+          )}
         </View>
 
         <Text style={styles.taskDescription} numberOfLines={2}>
@@ -180,9 +172,7 @@ export default function TaskListScreen() {
         <View style={styles.taskMeta}>
           <View style={styles.metaRow}>
             <Ionicons name="calendar" size={14} color="#666666" />
-            <Text style={styles.metaText}>
-              마감: {formatDate(task.deadline)}
-            </Text>
+            <Text style={styles.metaText}>마감: {formatDate(task.due)}</Text>
           </View>
           <View style={styles.metaRow}>
             <Ionicons name="person" size={14} color="#666666" />
@@ -203,27 +193,43 @@ export default function TaskListScreen() {
           <Text style={styles.progressText}>{status.progress}%</Text>
         </View>
 
-        {/* 팀원 아바타 */}
+        {/* 팀원 아바타와 제출 현황 */}
         <View style={styles.membersContainer}>
-          <Text style={styles.membersLabel}>담당자:</Text>
-          <View style={styles.avatarsContainer}>
-            {task.assignedMembers.slice(0, 3).map((member) => (
-              <View key={member.id} style={styles.avatarContainer}>
-                <Image source={member.avatar} style={styles.memberAvatar} />
-                {member.hasSubmitted && (
-                  <View style={styles.submittedBadge}>
-                    <Ionicons name="checkmark" size={8} color="#FFFFFF" />
+          <View style={styles.membersLeft}>
+            <Text style={styles.membersLabel}>담당자:</Text>
+            <View style={styles.avatarsContainer}>
+              {task.assignedMembers.slice(0, 3).map((member) => (
+                <View key={member.id} style={styles.avatarContainer}>
+                  <View style={styles.memberAvatar}>
+                    <Text style={styles.avatarText}>
+                      {member.name.charAt(0)}
+                    </Text>
                   </View>
-                )}
-              </View>
-            ))}
-            {task.assignedMembers.length > 3 && (
-              <View style={styles.moreMembers}>
-                <Text style={styles.moreMembersText}>
-                  +{task.assignedMembers.length - 3}
-                </Text>
-              </View>
-            )}
+                  {member.hasSubmitted && (
+                    <View style={styles.submittedBadge}>
+                      <Ionicons name="checkmark" size={8} color="#FFFFFF" />
+                    </View>
+                  )}
+                </View>
+              ))}
+              {task.assignedMembers.length > 3 && (
+                <View style={styles.moreMembers}>
+                  <Text style={styles.moreMembersText}>
+                    +{task.assignedMembers.length - 3}
+                  </Text>
+                </View>
+              )}
+            </View>
+          </View>
+
+          {/* 제출 현황을 우측 하단으로 이동 */}
+          <View style={styles.taskStatus}>
+            <View
+              style={[styles.statusDot, { backgroundColor: status.color }]}
+            />
+            <Text style={[styles.statusText, { color: status.color }]}>
+              {status.text}
+            </Text>
           </View>
         </View>
       </TouchableOpacity>
@@ -244,7 +250,12 @@ export default function TaskListScreen() {
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {tasks.length === 0 ? (
+        {isLoading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#007AFF" />
+            <Text style={styles.loadingText}>과제 목록을 불러오는 중...</Text>
+          </View>
+        ) : tasks.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Ionicons name="document-outline" size={64} color="#666666" />
             <Text style={styles.emptyTitle}>생성된 과제가 없습니다</Text>
@@ -314,6 +325,13 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: 12,
   },
+  deleteButton: {
+    padding: 4,
+    borderRadius: 6,
+    backgroundColor: 'rgba(255, 59, 48, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 59, 48, 0.3)',
+  },
   taskStatus: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -372,6 +390,11 @@ const styles = StyleSheet.create({
   },
   membersContainer: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  membersLeft: {
+    flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
@@ -392,6 +415,14 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 2,
     borderColor: '#121216',
+    backgroundColor: '#007AFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarText: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
   },
   submittedBadge: {
     position: 'absolute',
@@ -437,5 +468,16 @@ const styles = StyleSheet.create({
     color: '#666666',
     textAlign: 'center',
     lineHeight: 20,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 60,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#CCCCCC',
+    marginTop: 16,
   },
 });

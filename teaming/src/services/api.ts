@@ -272,4 +272,30 @@ export const updateName = async (data: UpdateNameRequest): Promise<void> => {
   }
 };
 
+// 비밀번호 변경 API
+export interface UpdatePasswordRequest {
+  currentPassword: string;
+  newPassword: string;
+}
+
+export const updatePassword = async (
+  data: UpdatePasswordRequest
+): Promise<void> => {
+  try {
+    console.log('🚀 비밀번호 변경 API 요청');
+    console.log('📤 요청 데이터:', {
+      currentPassword: data.currentPassword ? '***' : 'undefined',
+      newPassword: data.newPassword ? '***' : 'undefined',
+    });
+    const response = await apiClient.patch('/users/me/password', data);
+    console.log('✅ 비밀번호 변경 성공:', response.data);
+    console.log('📥 응답 상태:', response.status);
+  } catch (error: any) {
+    console.error('❌ 비밀번호 변경 실패:', error);
+    console.error('📥 에러 상태:', error.response?.status);
+    console.error('📥 에러 데이터:', error.response?.data);
+    throw error;
+  }
+};
+
 export default apiClient;

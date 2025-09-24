@@ -11,7 +11,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import {
@@ -29,8 +29,13 @@ import {
   LoginType,
   getAccessToken,
 } from '../../../src/services/tokenManager';
+import { AvatarService } from '../../../src/services/avatarService';
 
 export default function AccountInfoScreen() {
+  const { userInfo: userInfoParam } = useLocalSearchParams<{
+    userInfo?: string;
+  }>();
+
   const [email, setEmail] = useState('');
   const [nickname, setNickname] = useState('');
   const [profileImage, setProfileImage] = useState<string | any>(
@@ -61,11 +66,23 @@ export default function AccountInfoScreen() {
       try {
         setIsLoadingUserInfo(true);
 
-        // 사용자 정보와 로그인 타입을 병렬로 가져오기
-        const [userInfo, currentLoginType] = await Promise.all([
-          getUserInfo(),
-          getLoginType(),
-        ]);
+        let userInfo: UserInfo;
+
+        // 전달받은 사용자 정보가 있으면 사용, 없으면 API 호출
+        if (userInfoParam) {
+          try {
+            userInfo = JSON.parse(userInfoParam);
+            console.log('전달받은 사용자 정보 사용:', userInfo);
+          } catch (parseError) {
+            console.error('사용자 정보 파싱 실패:', parseError);
+            userInfo = await getUserInfo();
+          }
+        } else {
+          userInfo = await getUserInfo();
+        }
+
+        // 로그인 타입 가져오기
+        const currentLoginType = await getLoginType();
 
         setEmail(userInfo.email);
         setNickname(userInfo.name);
@@ -84,7 +101,7 @@ export default function AccountInfoScreen() {
     };
 
     fetchUserInfo();
-  }, []);
+  }, [userInfoParam]);
 
   const handleBackPress = () => {
     router.back();
@@ -101,9 +118,26 @@ export default function AccountInfoScreen() {
       });
 
       if (!result.canceled && result.assets.length > 0) {
-        setProfileImage(result.assets[0].uri);
+        const selectedImageUri = result.assets[0].uri;
+
+        // 이미지 선택 후 즉시 S3에 업로드
+        try {
+          console.log('🚀 프로필 이미지 S3 업로드 시작');
+          const avatarResult = await AvatarService.uploadAvatar(
+            selectedImageUri
+          );
+          console.log('✅ 프로필 이미지 S3 업로드 완료:', avatarResult);
+
+          // 업로드 성공 시 로컬 상태 업데이트
+          setProfileImage(selectedImageUri);
+          Alert.alert('성공', '프로필 이미지가 업데이트되었습니다.');
+        } catch (uploadError) {
+          console.error('❌ 프로필 이미지 업로드 실패:', uploadError);
+          Alert.alert('업로드 실패', '이미지 업로드 중 오류가 발생했습니다.');
+        }
       }
     } catch (error) {
+      console.error('❌ 이미지 선택 오류:', error);
       Alert.alert('오류', '이미지를 선택하는 중 오류가 발생했습니다.');
     }
   };
@@ -415,11 +449,6 @@ export default function AccountInfoScreen() {
     }
   };
 
-  const handleSave = () => {
-    Alert.alert('저장', '계정정보가 저장되었습니다.');
-    router.back();
-  };
-
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
@@ -667,13 +696,6 @@ export default function AccountInfoScreen() {
               </View>
             </View>
           </ScrollView>
-
-          {/* 저장 버튼 */}
-          <View style={styles.buttonContainer}>
-            <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-              <Text style={styles.saveButtonText}>저장하기</Text>
-            </TouchableOpacity>
-          </View>
         </>
       ) : (
         renderSocialLoginView()
@@ -789,23 +811,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '500',
     color: '#000000',
-  },
-  buttonContainer: {
-    paddingHorizontal: 20,
-    paddingVertical: 20,
-    backgroundColor: '#000000',
-  },
-  saveButton: {
-    backgroundColor: '#CCCCCC',
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  saveButtonText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
   },
 
   // 이메일 변경 관련 스타일

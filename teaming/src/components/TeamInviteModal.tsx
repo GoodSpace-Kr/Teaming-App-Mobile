@@ -1,5 +1,5 @@
 // TeamInviteModal.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -21,6 +21,7 @@ interface TeamInviteModalProps {
   onEnterRoom: () => void;
   teamName: string;
   inviteCode: string;
+  roomId?: number | null;
 }
 
 const { width } = Dimensions.get('window');
@@ -31,11 +32,19 @@ export default function TeamInviteModal({
   onEnterRoom,
   teamName,
   inviteCode,
+  roomId,
 }: TeamInviteModalProps) {
   const [copied, setCopied] = useState(false);
 
   // 초대 링크 생성 (실제 앱 스토어 링크로 변경 예정)
   const inviteLink = `https://teaming.app/join/${inviteCode}`;
+
+  // roomId 로깅 (디버깅용)
+  useEffect(() => {
+    if (roomId) {
+      console.log('🏠 TeamInviteModal에서 받은 roomId:', roomId);
+    }
+  }, [roomId]);
 
   // 링크 복사
   const handleCopyLink = async () => {
@@ -169,10 +178,6 @@ export default function TeamInviteModal({
               <Text style={styles.enterRoomButtonText}>
                 채팅방 목록으로 이동
               </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.closeModalButton} onPress={onClose}>
-              <Text style={styles.closeModalButtonText}>나중에 하기</Text>
             </TouchableOpacity>
           </View>
         </View>

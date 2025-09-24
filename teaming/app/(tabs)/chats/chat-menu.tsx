@@ -67,17 +67,17 @@ export default function ChatMenuScreen() {
   };
 
   const handleCreateTask = () => {
-    router.push('/(tabs)/chats/create-task');
+    router.push(`/(tabs)/chats/create-task?roomId=${roomId}`);
   };
 
   const handleViewTasks = () => {
     // 과제 목록 화면으로 이동
-    router.push('/(tabs)/chats/task-list');
+    router.push(`/(tabs)/chats/task-list?roomId=${roomId}`);
   };
 
   const handleSubmitTasks = () => {
     // 과제 제출 화면으로 이동
-    router.push('/(tabs)/chats/submit-task');
+    router.push(`/(tabs)/chats/submit-task?roomId=${roomId}`);
   };
 
   const handleLeaveRoom = () => {

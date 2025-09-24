@@ -8,22 +8,39 @@ import {
   Image,
   Dimensions,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { logout } from '../../../src/services/authService';
+import { getUserInfo, UserInfo } from '../../../src/services/api';
 
 const { width } = Dimensions.get('window');
 
 export default function MyPageScreen() {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
+  const [isLoadingUserInfo, setIsLoadingUserInfo] = useState(true);
 
-  // 프로필 탭이 포커스될 때마다 초기화
+  // 프로필 탭이 포커스될 때마다 사용자 정보 가져오기
   useFocusEffect(
     useCallback(() => {
-      // 프로필 화면으로 돌아올 때 필요한 초기화 로직
-      console.log('프로필 화면 포커스 - 초기화');
+      const fetchUserInfo = async () => {
+        try {
+          setIsLoadingUserInfo(true);
+          const userData = await getUserInfo();
+          setUserInfo(userData);
+          console.log('마이페이지 사용자 정보 로드:', userData);
+        } catch (error) {
+          console.error('사용자 정보 가져오기 실패:', error);
+          // 에러가 발생해도 기본값으로 계속 진행
+        } finally {
+          setIsLoadingUserInfo(false);
+        }
+      };
+
+      fetchUserInfo();
     }, [])
   );
 
@@ -44,7 +61,17 @@ export default function MyPageScreen() {
   };
 
   const handleChangeAccountInfo = () => {
-    router.push('/(tabs)/profile/account-info');
+    if (userInfo) {
+      router.push({
+        pathname: '/(tabs)/profile/account-info',
+        params: {
+          userInfo: JSON.stringify(userInfo),
+        },
+      });
+    } else {
+      // 사용자 정보가 없으면 기본적으로 이동
+      router.push('/(tabs)/profile/account-info');
+    }
   };
 
   const handleLogout = async () => {
@@ -102,13 +129,30 @@ export default function MyPageScreen() {
         {/* 프로필 섹션 */}
         <View style={styles.profileSection}>
           <View style={styles.profileImageContainer}>
-            <Image
-              source={require('@/assets/images/(myPage)/myCat.jpeg')}
-              style={styles.profileImage}
-            />
+            {isLoadingUserInfo ? (
+              <View style={styles.profileImageLoading}>
+                <ActivityIndicator size="large" color="#4A90E2" />
+              </View>
+            ) : (
+              <Image
+                source={require('@/assets/images/(myPage)/myCat.jpeg')}
+                style={styles.profileImage}
+              />
+            )}
             <View style={styles.profileImageBorder} />
           </View>
-          <Text style={styles.userName}>권민석님</Text>
+          {isLoadingUserInfo ? (
+            <View style={styles.userNameLoading}>
+              <ActivityIndicator size="small" color="#FFFFFF" />
+              <Text style={styles.loadingText}>
+                사용자 정보를 불러오는 중...
+              </Text>
+            </View>
+          ) : (
+            <Text style={styles.userName}>
+              {userInfo?.name ? `${userInfo.name}님` : '사용자님'}
+            </Text>
+          )}
           <Text style={styles.welcomeMessage}>당신의 팀플을 응원해요 👋</Text>
         </View>
 
@@ -368,5 +412,23 @@ const styles = StyleSheet.create({
   },
   dangerText: {
     color: '#FF6B6B',
+  },
+  profileImageLoading: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#1A1A1A',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  userNameLoading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#B0B0B0',
+    marginLeft: 8,
   },
 });

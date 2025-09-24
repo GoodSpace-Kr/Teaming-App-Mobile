@@ -89,7 +89,7 @@ export const refreshAccessToken = async (): Promise<boolean> => {
     }
 
     console.log('🔄 토큰 갱신 시도...');
-    const response = await apiClient.post('/api/auth/token/access-token', {
+    const response = await apiClient.post('/users/me/access-token', {
       refreshToken: refreshToken,
     });
 

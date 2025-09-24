@@ -9,10 +9,14 @@ import {
   Image,
   Dimensions,
   Modal,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { TaskService } from '@/src/services/taskService';
+import { CreateTaskRequest } from '@/src/types/task';
 
 const { width } = Dimensions.get('window');
 
@@ -24,16 +28,16 @@ interface TeamMember {
 }
 
 export default function CreateTaskScreen() {
-  const [taskTitle, setTaskTitle] = useState('자료조사 2명 과제부여');
-  const [taskDescription, setTaskDescription] = useState(
-    '자료조사를 하겠다고 한 2명에게 과제를 부여합니다.\n제한시간에 맞춰서 과제 제출해주시면 감사하겠습니다.'
-  );
+  const { roomId } = useLocalSearchParams<{ roomId: string }>();
+  const [taskTitle, setTaskTitle] = useState('');
+  const [taskDescription, setTaskDescription] = useState('');
   const [selectedMonth, setSelectedMonth] = useState('09');
   const [selectedDay, setSelectedDay] = useState('07');
   const [selectedTime, setSelectedTime] = useState('07:00');
   const [showMonthPicker, setShowMonthPicker] = useState(false);
   const [showDayPicker, setShowDayPicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
 
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([
     {
@@ -76,10 +80,84 @@ export default function CreateTaskScreen() {
     );
   };
 
-  const handleCreateTask = () => {
-    console.log('과제 생성하기');
-    // TODO: 과제 생성 API 호출
-    router.back();
+  const handleCreateTask = async () => {
+    // roomId 검증
+    if (!roomId) {
+      Alert.alert('오류', '채팅방 정보를 찾을 수 없습니다.');
+      return;
+    }
+
+    const roomIdNumber = Number(roomId);
+    if (isNaN(roomIdNumber)) {
+      Alert.alert('오류', '유효하지 않은 채팅방 ID입니다.');
+      return;
+    }
+
+    // 입력값 검증
+    if (!taskTitle.trim()) {
+      Alert.alert('오류', '과제 제목을 입력해주세요.');
+      return;
+    }
+
+    if (!taskDescription.trim()) {
+      Alert.alert('오류', '과제 설명을 입력해주세요.');
+      return;
+    }
+
+    const selectedMembers = teamMembers.filter((member) => member.isSelected);
+    if (selectedMembers.length === 0) {
+      Alert.alert('오류', '과제를 할당할 팀원을 선택해주세요.');
+      return;
+    }
+
+    try {
+      setIsCreating(true);
+
+      // 날짜/시간을 ISO 8601 형식으로 변환
+      const dueDate = new Date();
+      dueDate.setFullYear(2025);
+      dueDate.setMonth(parseInt(selectedMonth) - 1);
+      dueDate.setDate(parseInt(selectedDay));
+      dueDate.setHours(parseInt(selectedTime.split(':')[0]));
+      dueDate.setMinutes(parseInt(selectedTime.split(':')[1]));
+      dueDate.setSeconds(0);
+      dueDate.setMilliseconds(0);
+
+      const taskData: CreateTaskRequest = {
+        title: taskTitle.trim(),
+        description: taskDescription.trim(),
+        assignedMemberIds: selectedMembers.map((member) => member.id),
+        due: TaskService.formatDateToISO(dueDate),
+      };
+
+      console.log('🚀 과제 생성 요청:', taskData);
+      console.log('🚀 roomId:', roomId, 'roomIdNumber:', roomIdNumber);
+
+      const response = await TaskService.createTask(roomIdNumber, taskData);
+
+      console.log('✅ 과제 생성 성공:', response);
+
+      Alert.alert(
+        '과제 생성 완료',
+        `"${taskTitle}" 과제가 성공적으로 생성되었습니다.`,
+        [
+          {
+            text: '확인',
+            onPress: () => router.back(),
+          },
+        ]
+      );
+    } catch (error: any) {
+      console.error('❌ 과제 생성 실패:', error);
+      Alert.alert(
+        '과제 생성 실패',
+        `과제 생성 중 오류가 발생했습니다.\n${
+          error.message || '알 수 없는 오류'
+        }`
+      );
+    } finally {
+      setIsCreating(false);
+    }
   };
 
   const handleMonthSelect = (month: string) => {
@@ -276,10 +354,21 @@ export default function CreateTaskScreen() {
       {/* 과제 생성 버튼 */}
       <View style={styles.buttonContainer}>
         <TouchableOpacity
-          style={styles.createButton}
+          style={[
+            styles.createButton,
+            isCreating && styles.createButtonDisabled,
+          ]}
           onPress={handleCreateTask}
+          disabled={isCreating}
         >
-          <Text style={styles.createButtonText}>과제 생성</Text>
+          {isCreating ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="small" color="#FFFFFF" />
+              <Text style={styles.createButtonText}>생성 중...</Text>
+            </View>
+          ) : (
+            <Text style={styles.createButtonText}>과제 생성</Text>
+          )}
         </TouchableOpacity>
       </View>
     </View>
@@ -458,5 +547,14 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     color: '#FFFFFF',
+  },
+  createButtonDisabled: {
+    backgroundColor: '#666666',
+    opacity: 0.7,
+  },
+  loadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
 });

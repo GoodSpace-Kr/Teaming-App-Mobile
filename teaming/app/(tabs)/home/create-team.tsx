@@ -35,6 +35,7 @@ export default function CreateTeamScreen() {
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [createdTeamName, setCreatedTeamName] = useState('');
   const [inviteCode, setInviteCode] = useState('');
+  const [roomId, setRoomId] = useState<number | null>(null);
   const [isCreating, setIsCreating] = useState(false);
 
   // 탭 전환 감지 및 처리
@@ -88,9 +89,17 @@ export default function CreateTeamScreen() {
 
       console.log('✅ 팀 생성 성공:', response);
 
-      // 서버에서 받은 초대 코드 사용
+      // 서버에서 받은 초대 코드와 roomId 사용
       setCreatedTeamName(roomTitle);
       setInviteCode(response.inviteCode);
+
+      // roomId가 있으면 저장
+      if (response.roomId) {
+        setRoomId(response.roomId);
+        console.log('🏠 생성된 방 ID:', response.roomId);
+      } else {
+        console.log('⚠️ roomId가 응답에 없습니다');
+      }
 
       // 초대 모달 표시
       setShowInviteModal(true);
@@ -380,6 +389,7 @@ export default function CreateTeamScreen() {
         onEnterRoom={handleEnterRoom} // ✅ 닫고 전환은 여기서만
         teamName={createdTeamName}
         inviteCode={inviteCode}
+        roomId={roomId}
       />
     </View>
   );

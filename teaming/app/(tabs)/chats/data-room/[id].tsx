@@ -8,22 +8,17 @@ import {
   Image,
   Dimensions,
   Alert,
+  Linking,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { FileService } from '@/src/services/fileService';
+import { FileItem } from '@/src/types/file';
 
 const { width } = Dimensions.get('window');
 
-interface FileItem {
-  id: string;
-  name: string;
-  size: number;
-  type: string;
-  uploadedBy: string;
-  uploadedAt: string;
-  fileIcon: string;
-}
+// FileItem 타입은 이미 import했으므로 중복 제거
 
 export default function DataRoomScreen() {
   const { id } = useLocalSearchParams();
@@ -108,61 +103,43 @@ export default function DataRoomScreen() {
     router.back();
   };
 
-  const handleFilePress = (file: FileItem) => {
-    Alert.alert(
-      '파일 정보',
-      `파일명: ${file.name}\n크기: ${formatFileSize(file.size)}\n업로드: ${
-        file.uploadedBy
-      }\n시간: ${file.uploadedAt}`,
-      [{ text: '확인' }]
-    );
+  const handleFilePress = async (file: FileItem) => {
+    try {
+      if (file.fileId) {
+        // 실제 fileId가 있는 경우 다운로드 시도
+        console.log('📥 파일 다운로드 시작:', file.name);
+
+        const downloadUrl = await FileService.downloadFile(file.fileId);
+
+        // 브라우저나 외부 앱에서 파일 열기
+        const supported = await Linking.canOpenURL(downloadUrl);
+        if (supported) {
+          await Linking.openURL(downloadUrl);
+        } else {
+          Alert.alert('오류', '이 파일을 열 수 없습니다.');
+        }
+      } else {
+        // 목데이터인 경우 파일 정보만 표시
+        Alert.alert(
+          '파일 정보',
+          `파일명: ${file.name}\n크기: ${FileService.formatFileSize(
+            file.size
+          )}\n업로드: ${file.uploadedBy}\n시간: ${file.uploadedAt}`,
+          [{ text: '확인' }]
+        );
+      }
+    } catch (error: any) {
+      console.error('파일 다운로드 오류:', error);
+      Alert.alert(
+        '다운로드 실패',
+        `파일 다운로드 중 오류가 발생했습니다.\n${
+          error.message || '알 수 없는 오류'
+        }`
+      );
+    }
   };
 
-  const formatFileSize = (bytes: number) => {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-  };
-
-  const getFileIcon = (file: FileItem) => {
-    const iconMap: { [key: string]: string } = {
-      'application/pdf': 'document',
-      'application/vnd.openxmlformats-officedocument.presentationml.presentation':
-        'easel',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
-        'document-text',
-      'application/x-hwp': 'document-text',
-      'text/plain': 'document-text',
-      'image/jpeg': 'image',
-      'image/png': 'image',
-      'image/gif': 'image',
-      'video/mp4': 'videocam',
-      'video/avi': 'videocam',
-      'video/mov': 'videocam',
-    };
-    return iconMap[file.type] || 'document';
-  };
-
-  const getFileIconColor = (file: FileItem) => {
-    const colorMap: { [key: string]: string } = {
-      'application/pdf': '#FF3B30', // 빨간색
-      'application/vnd.openxmlformats-officedocument.presentationml.presentation':
-        '#FF9500', // 주황색
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
-        '#007AFF', // 파란색
-      'application/x-hwp': '#34C759', // 초록색
-      'text/plain': '#8E8E93', // 회색
-      'image/jpeg': '#FF2D92', // 핑크색
-      'image/png': '#FF2D92',
-      'image/gif': '#FF2D92',
-      'video/mp4': '#AF52DE', // 보라색
-      'video/avi': '#AF52DE',
-      'video/mov': '#AF52DE',
-    };
-    return colorMap[file.type] || '#8E8E93';
-  };
+  // FileService의 유틸리티 함수들을 사용하므로 중복 제거
 
   const renderFileItem = (file: FileItem) => (
     <TouchableOpacity
@@ -172,9 +149,9 @@ export default function DataRoomScreen() {
     >
       <View style={styles.fileIconContainer}>
         <Ionicons
-          name={getFileIcon(file) as any}
+          name={FileService.getFileIcon(file.type) as any}
           size={24}
-          color={getFileIconColor(file)}
+          color={FileService.getFileIconColor(file.type)}
         />
       </View>
 
@@ -183,7 +160,9 @@ export default function DataRoomScreen() {
           {file.name}
         </Text>
         <View style={styles.fileMeta}>
-          <Text style={styles.fileSize}>{formatFileSize(file.size)}</Text>
+          <Text style={styles.fileSize}>
+            {FileService.formatFileSize(file.size)}
+          </Text>
           <Text style={styles.fileSeparator}>•</Text>
           <Text style={styles.fileUploader}>{file.uploadedBy}</Text>
         </View>
