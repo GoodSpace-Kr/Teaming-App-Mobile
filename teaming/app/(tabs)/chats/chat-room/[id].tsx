@@ -69,7 +69,19 @@ export default function ChatRoomScreen() {
   const [connectionStatus, setConnectionStatus] = useState<
     'connecting' | 'connected' | 'disconnected' | 'error'
   >('disconnected');
+  const [currentUserId, setCurrentUserId] = useState<number | null>(null);
   const scrollViewRef = useRef<ScrollView>(null);
+
+  // JWT 토큰에서 사용자 ID 추출하는 함수
+  const getUserIdFromToken = (token: string): number | null => {
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      return payload.sub ? parseInt(payload.sub) : null;
+    } catch (error) {
+      console.error('토큰에서 사용자 ID 추출 실패:', error);
+      return null;
+    }
+  };
 
   // role 정보 로깅
   useEffect(() => {
@@ -90,6 +102,13 @@ export default function ChatRoomScreen() {
           token ? '토큰 존재' : '토큰 없음'
         );
 
+        // 토큰에서 사용자 ID 추출
+        if (token) {
+          const userId = getUserIdFromToken(token);
+          setCurrentUserId(userId);
+          console.log('👤 현재 사용자 ID:', userId);
+        }
+
         if (token) {
           // SockJS 연결 시작
           setConnectionStatus('connecting');
@@ -104,6 +123,7 @@ export default function ChatRoomScreen() {
 
             // 채팅방 구독 (연결 완료 후 약간의 지연)
             setTimeout(() => {
+              console.log('🔔 구독 시작 - 방 ID:', Number(id));
               const unsubscribe = subscribeRoomSock(Number(id), (message) => {
                 console.log('📨 새 메시지 수신:', message);
                 console.log('📨 메시지 타입:', typeof message);
@@ -118,9 +138,11 @@ export default function ChatRoomScreen() {
                   return newMessages;
                 });
               });
+              console.log('🔔 구독 함수 반환됨');
 
               // 컴포넌트 언마운트 시 정리
               return () => {
+                console.log('🔔 구독 해제');
                 unsubscribe();
                 disconnectSock();
               };
@@ -158,6 +180,7 @@ export default function ChatRoomScreen() {
   // 메시지 목록을 표시용 메시지로 변환
   console.log('🔄 현재 메시지 개수:', messages.length);
   console.log('🔄 현재 메시지들:', messages);
+  console.log('👤 현재 사용자 ID:', currentUserId);
   const displayMessages = messages.map((msg: ChatMessage) => ({
     id: msg.messageId || 0,
     text: msg.content || '',
@@ -176,7 +199,7 @@ export default function ChatRoomScreen() {
           minute: '2-digit',
           hour12: true,
         }),
-    isMe: false, // TODO: 현재 사용자 ID와 비교해서 설정
+    isMe: currentUserId !== null && msg.sender?.id === currentUserId, // 현재 사용자 ID와 비교
     readCount: 1, // TODO: 실제 읽음 수 구현
   }));
 

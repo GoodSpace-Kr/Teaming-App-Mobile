@@ -253,7 +253,13 @@ export function sendTextSock(roomId: number, content: string) {
   c.publish({
     destination: `${SEND_PREFIX}${roomId}/send`,
     headers: { ...authHeaders(), 'content-type': 'application/json' } as any,
-    body: JSON.stringify({ type: 'TEXT', content }),
+    body: JSON.stringify({
+      type: 'TEXT',
+      content,
+      clientMessageId: `client_${Date.now()}_${Math.random()
+        .toString(36)
+        .substr(2, 9)}`,
+    }),
   });
 }
 
@@ -272,6 +278,9 @@ export function sendImageSock(
       type: 'IMAGE',
       name: fileName,
       attachmentFileIdsInOrder: fileIds,
+      clientMessageId: `client_${Date.now()}_${Math.random()
+        .toString(36)
+        .substr(2, 9)}`,
     }),
   });
 }
@@ -291,6 +300,9 @@ export function sendFileSock(
       type: 'FILE',
       name: fileName,
       attachmentFileIdsInOrder: fileIds,
+      clientMessageId: `client_${Date.now()}_${Math.random()
+        .toString(36)
+        .substr(2, 9)}`,
     }),
   });
 }
