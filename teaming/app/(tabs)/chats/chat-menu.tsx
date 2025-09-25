@@ -7,11 +7,14 @@ import {
   TouchableOpacity,
   Image,
   Dimensions,
+  Alert,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import CompleteTeamModal from './complete-team-modal';
+import TeamCompletionSuccessModal from './team-completion-success-modal';
+import * as apiService from '@/src/services/api';
 
 const { width } = Dimensions.get('window');
 
@@ -23,12 +26,16 @@ interface Participant {
 }
 
 export default function ChatMenuScreen() {
-  const { roomId, isLeader } = useLocalSearchParams();
+  const { roomId, isLeader, isCompleted } = useLocalSearchParams();
   const [showLeaveModal, setShowLeaveModal] = useState(false);
   const [showCompleteModal, setShowCompleteModal] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [isCompleting, setIsCompleting] = useState(false);
 
   // 팀장 여부 확인 (실제로는 API에서 가져올 데이터)
   const isTeamLeader = isLeader === 'true';
+  // 팀플 완료 상태 확인
+  const isTeamCompleted = isCompleted === 'true';
 
   // 참가자 목록 (실제로는 API에서 가져올 데이터)
   const participants: Participant[] = [
@@ -102,17 +109,55 @@ export default function ChatMenuScreen() {
     setShowCompleteModal(true);
   };
 
-  const handleConfirmComplete = () => {
-    // 팀플 완료 처리
-    console.log('팀플 완료 처리');
-    setShowCompleteModal(false);
-    // 완료 후 홈 화면으로 이동하거나 다른 처리
-    router.push('/(tabs)/home');
+  const handleConfirmComplete = async () => {
+    if (!roomId || isCompleting) return;
+
+    try {
+      setIsCompleting(true);
+      setShowCompleteModal(false);
+
+      console.log('🔍 apiService 확인:', apiService);
+      console.log(
+        '🔍 completeTeamProject 함수 확인:',
+        typeof apiService.completeTeamProject
+      );
+      console.log('🔍 roomId:', roomId, 'Number(roomId):', Number(roomId));
+
+      // PATCH API 요청으로 팀플 완료 처리
+      if (typeof apiService.completeTeamProject === 'function') {
+        await apiService.completeTeamProject(Number(roomId));
+      } else {
+        // 직접 API 호출로 대체
+        console.log('🔄 직접 API 호출로 대체');
+        const response = await apiService.default.patch(
+          `/rooms/${roomId}/success`
+        );
+        console.log('✅ 직접 API 호출 성공:', response.data);
+      }
+
+      // 성공 모달 표시
+      setShowSuccessModal(true);
+    } catch (error: any) {
+      console.error('팀플 완료 실패:', error);
+      Alert.alert(
+        '오류',
+        '팀플 완료 처리 중 오류가 발생했습니다.\n다시 시도해주세요.',
+        [{ text: '확인' }]
+      );
+    } finally {
+      setIsCompleting(false);
+    }
   };
 
   const handleCancelComplete = () => {
     // 모달 닫기
     setShowCompleteModal(false);
+  };
+
+  const handleSuccessModalClose = () => {
+    // 성공 모달 닫기 후 홈 화면으로 이동
+    setShowSuccessModal(false);
+    router.push('/(tabs)/home');
   };
 
   return (
@@ -217,27 +262,47 @@ export default function ChatMenuScreen() {
           ))}
         </View>
 
-        {/* 팀플 완료 (팀장만) */}
+        {/* 팀플 완료 또는 나가기 (팀장만) */}
         {isTeamLeader && (
           <View style={styles.section}>
-            <TouchableOpacity
-              style={styles.completeButton}
-              onPress={handleCompleteTeam}
-            >
-              <View style={styles.completeIcon}>
-                <Ionicons name="trophy" size={24} color="#FFD700" />
-              </View>
-              <Text style={styles.completeText}>팀플 완료</Text>
-              <Ionicons name="chevron-forward" size={20} color="#666666" />
-            </TouchableOpacity>
+            {isTeamCompleted ? (
+              <TouchableOpacity
+                style={styles.leaveButton}
+                onPress={handleLeaveRoom}
+              >
+                <View style={styles.leaveIcon}>
+                  <Ionicons name="exit" size={24} color="#FF3B30" />
+                </View>
+                <Text style={styles.leaveText}>티밍룸 나가기</Text>
+                <Ionicons name="chevron-forward" size={20} color="#666666" />
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={styles.completeButton}
+                onPress={handleCompleteTeam}
+              >
+                <View style={styles.completeIcon}>
+                  <Ionicons name="trophy" size={24} color="#FFD700" />
+                </View>
+                <Text style={styles.completeText}>팀플 완료</Text>
+                <Ionicons name="chevron-forward" size={20} color="#666666" />
+              </TouchableOpacity>
+            )}
           </View>
         )}
       </ScrollView>
-      {/* 팀플 완료 모달 */}
+      {/* 팀플 완료 확인 모달 */}
       <CompleteTeamModal
         visible={showCompleteModal}
         onClose={handleCancelComplete}
         onConfirm={handleConfirmComplete}
+        teamName="정치학 발표"
+      />
+
+      {/* 팀플 완료 성공 모달 */}
+      <TeamCompletionSuccessModal
+        visible={showSuccessModal}
+        onClose={handleSuccessModalClose}
         teamName="정치학 발표"
       />
     </View>

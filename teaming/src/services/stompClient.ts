@@ -1,6 +1,6 @@
 // React Native STOMP over SockJS client for Teaming
 // 서버(Spring) 설정 매칭:
-//  - SockJS 엔드포인트: http://13.125.193.243:8080/ws-sockjs
+//  - SockJS 엔드포인트: https://teamingkr.duckdns.org/api/ws-sockjs
 //  - SUBSCRIBE: /topic/rooms/{roomId}
 //  - SEND     : /app/rooms/{roomId}/send
 //  - CONNECT/SUBSCRIBE/SEND 모두 Authorization 포함
@@ -14,7 +14,7 @@ import {
 } from '@/src/services/tokenManager';
 
 // ====== 고정값 ======
-const HTTP_BASE = 'http://13.125.193.243:8080'; // 필요시 https로 교체
+const HTTP_BASE = 'https://teamingkr.duckdns.org/api'; // 필요시 https로 교체
 const SOCKJS_ENDPOINT = `${HTTP_BASE.replace(/\/+$/, '')}/ws-sockjs`;
 const SUB_PREFIX = '/topic/rooms/';
 const SEND_PREFIX = '/app/rooms/';
@@ -91,7 +91,7 @@ export async function connectSock(token?: string) {
 
     // ✅ CONNECT 헤더에 토큰(대/소문자 둘 다) + host
     connectHeaders: {
-      host: '13.125.193.243:8080',
+      host: 'teamingkr.duckdns.org',
       'accept-version': '1.2,1.1,1.0',
       ...authHeaders(),
     } as any,
@@ -318,14 +318,11 @@ export async function connectAndSubscribeSock(
   // stompjs의 activate는 비동기라 연결완료 보장
   await new Promise<void>((resolve, reject) => {
     const c = ensureClient();
-    let timeout: NodeJS.Timeout | null = null;
 
     const ok = () => {
-      if (timeout) clearTimeout(timeout);
       resolve();
     };
     const fail = (e: any) => {
-      if (timeout) clearTimeout(timeout);
       reject(e);
     };
 
@@ -333,55 +330,7 @@ export async function connectAndSubscribeSock(
     c.onWebSocketError = fail;
 
     if (c.connected) ok();
-
-    timeout = setTimeout(
-      () => fail(new Error('SockJS connect timeout')),
-      8000
-    ) as any;
   });
 
   return subscribeRoomSock(roomId, onMessage);
 }
-
-// ====== 사용 예 ======
-/*
-import {
-  connectSock,
-  subscribeRoomSock,
-  sendTextSock,
-  sendImageSock,
-  sendFileSock,
-  disconnectSock,
-  connectAndSubscribeSock,
-} from './stompClient';
-
-async function boot() {
-  // 1) 연결
-  await connectSock();
-
-  // 2) 구독
-  const unsubscribe = subscribeRoomSock(123, (msg) => {
-    console.log('새 메시지:', msg);
-  });
-
-  // 3) 발행
-  sendTextSock(123, '안녕 팀원들!');
-  sendImageSock(123, 'image.jpg', [1, 2, 3]);
-  sendFileSock(123, 'document.pdf', [4]);
-
-  // … 필요 시
-  // unsubscribe();
-  // await disconnectSock();
-}
-
-// 또는 한 번에 연결+구독
-async function boot2() {
-  const unsubscribe = await connectAndSubscribeSock(123, (msg) => {
-    console.log('새 메시지:', msg);
-  });
-  
-  sendTextSock(123, '안녕!');
-}
-
-boot();
-*/

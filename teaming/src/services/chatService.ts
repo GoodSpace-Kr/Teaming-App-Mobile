@@ -63,18 +63,3 @@ export const getChatRooms = async (): Promise<ChatRoom[]> => {
     throw error;
   }
 };
-
-/**
- * 특정 채팅방 정보 가져오기
- */
-export const getChatRoom = async (roomId: number): Promise<ChatRoom> => {
-  try {
-    console.log(`🚀 채팅방 ${roomId} 정보 요청 중...`);
-    const response = await apiClient.get(`/rooms/${roomId}`);
-    console.log('✅ 채팅방 정보 응답:', response.data);
-    return response.data;
-  } catch (error) {
-    console.error(`❌ 채팅방 ${roomId} 정보 가져오기 실패:`, error);
-    throw error;
-  }
-};

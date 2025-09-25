@@ -55,7 +55,11 @@ interface ChatRoomData {
 }
 
 export default function ChatRoomScreen() {
-  const { id, role } = useLocalSearchParams<{ id: string; role?: string }>();
+  const { id, role, success } = useLocalSearchParams<{
+    id: string;
+    role?: string;
+    success?: string;
+  }>();
   const [inputText, setInputText] = useState('');
   const [showFileMenu, setShowFileMenu] = useState(false);
   const [jwt, setJwt] = useState<string | null>(null);
@@ -70,6 +74,7 @@ export default function ChatRoomScreen() {
     'connecting' | 'connected' | 'disconnected' | 'error'
   >('disconnected');
   const [currentUserId, setCurrentUserId] = useState<number | null>(null);
+  const [isTeamCompleted, setIsTeamCompleted] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
 
   // JWT 토큰에서 사용자 ID 추출하는 함수
@@ -83,13 +88,19 @@ export default function ChatRoomScreen() {
     }
   };
 
-  // role 정보 로깅
+  // role 및 success 정보 로깅
   useEffect(() => {
     if (role) {
       console.log('👑 채팅방에서 사용자 역할:', role);
       console.log('🏠 채팅방 ID:', id);
     }
-  }, [role, id]);
+
+    if (success !== undefined) {
+      const isCompleted = success === 'true';
+      setIsTeamCompleted(isCompleted);
+      console.log('🏠 채팅방 완료 상태:', isCompleted);
+    }
+  }, [role, id, success]);
 
   // JWT 토큰 가져오기 및 STOMP 연결
   useEffect(() => {
@@ -211,7 +222,7 @@ export default function ChatRoomScreen() {
     // URL 파라미터에서 팀장 여부 확인
     const isTeamLeader = role === 'LEADER';
     router.push(
-      `/(tabs)/chats/chat-menu?roomId=${id}&isLeader=${isTeamLeader}`
+      `/(tabs)/chats/chat-menu?roomId=${id}&isLeader=${isTeamLeader}&isCompleted=${isTeamCompleted}`
     );
   };
 

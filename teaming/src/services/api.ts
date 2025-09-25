@@ -7,12 +7,11 @@ import {
 } from './tokenManager';
 
 // API 기본 설정
-const API_BASE_URL = 'http://13.125.193.243:8080';
+const API_BASE_URL = 'https://teamingkr.duckdns.org/api';
 
 // Axios 인스턴스 생성
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -25,8 +24,8 @@ apiClient.interceptors.request.use(
       // 토큰이 필요한 API인지 확인 (로그인 관련 API 제외)
       const isAuthRequired =
         !config.url?.includes('/auth/') &&
-        !config.url?.includes('/health') &&
-        !config.url?.includes('/public/');
+        !config.url?.includes('/public/') &&
+        !config.url?.includes('/landing');
 
       if (isAuthRequired) {
         const token = await getAccessToken();
@@ -142,28 +141,6 @@ apiClient.interceptors.response.use(
     return Promise.reject(error);
   }
 );
-
-// 서버 연결 테스트 함수
-export const testServerConnection = async (): Promise<boolean> => {
-  try {
-    console.log('🔍 서버 연결 테스트 시작...');
-    const response = await apiClient.get('/health');
-    console.log('✅ 서버 연결 성공:', response.data);
-    return true;
-  } catch (error: any) {
-    console.error('❌ 서버 연결 실패:', error);
-    if (error.code === 'NETWORK_ERROR' || !error.response) {
-      console.error('네트워크 연결 문제 또는 서버가 응답하지 않음');
-    } else {
-      console.error(
-        '서버 응답 에러:',
-        error.response?.status,
-        error.response?.data
-      );
-    }
-    return false;
-  }
-};
 
 // 회원가입 API
 export interface SignUpRequest {
@@ -309,6 +286,18 @@ export const createPayment = async (amount: number): Promise<string> => {
     return response.data;
   } catch (error: any) {
     console.error('❌ 결제 API 실패:', error);
+    throw error;
+  }
+};
+
+// 팀플 완료 API
+export const completeTeamProject = async (roomId: number): Promise<void> => {
+  try {
+    console.log('🚀 팀플 완료 API 요청 - roomId:', roomId);
+    const response = await apiClient.patch(`/rooms/${roomId}/success`);
+    console.log('✅ 팀플 완료 성공:', response.data);
+  } catch (error: any) {
+    console.error('❌ 팀플 완료 실패:', error);
     throw error;
   }
 };

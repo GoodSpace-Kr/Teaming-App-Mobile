@@ -2,7 +2,7 @@
 
 ## 📋 구현 완료 사항
 
-### 1. 웹소켓 서비스 (`src/services/websocketService.ts`)
+### 1. STOMP 클라이언트 (`src/services/stompClient.ts`)
 
 - STOMP 프로토콜 기반 웹소켓 클라이언트
 - JWT 인증 지원
@@ -92,7 +92,7 @@ if (isConnected) {
 
 **해결 방법:**
 
-1. 서버 URL 확인: `ws://13.125.193.243:8080/ws/websocket`
+1. 서버 URL 확인: `wss://teamingkr.duckdns.org/api/ws/websocket`
 2. JWT 토큰 유효성 확인
 3. 네트워크 연결 상태 확인
 4. 서버가 실행 중인지 확인
@@ -135,7 +135,7 @@ console.log('웹소켓 상태:', status);
 ```typescript
 // 웹소켓 서비스에서 디버그 로그 활성화
 const client = new Client({
-  brokerURL: 'ws://13.125.193.243:8080/ws/websocket',
+  brokerURL: 'wss://teamingkr.duckdns.org/api/ws/websocket',
   debug: (str) => console.log('[STOMP]', str), // 이 부분이 중요!
   // ... 기타 설정
 });
@@ -167,7 +167,7 @@ const client = new Client({
 
 ```bash
 # 터미널에서 웹소켓 연결 테스트
-wscat -c ws://13.125.193.243:8080/ws/websocket
+wscat -c wss://teamingkr.duckdns.org/api/ws/websocket
 ```
 
 ### 2. 네트워크 모니터링

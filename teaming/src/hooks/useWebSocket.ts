@@ -1,13 +1,16 @@
 // useWebSocket.ts
 import { useEffect, useRef, useState, useCallback } from 'react';
 import {
-  WebSocketService,
-  WebSocketStatus,
-  ChatMessage,
-  ReadBoundaryUpdate,
-  UserError,
-  UserRoomEvent,
-} from '../services/websocketService';
+  connectSock,
+  subscribeRoomSock,
+  sendTextSock,
+  sendImageSock,
+  sendFileSock,
+  disconnectSock,
+  type ChatMessage,
+} from '../services/stompClient';
+
+type WebSocketStatus = 'connecting' | 'connected' | 'disconnected' | 'error';
 
 interface UseWebSocketOptions {
   jwt: string;
@@ -48,106 +51,83 @@ export const useWebSocket = ({
   );
   const [error, setError] = useState<string | null>(null);
 
-  const wsServiceRef = useRef<WebSocketService | null>(null);
   const unsubscribeRef = useRef<(() => void) | null>(null);
 
-  // 웹소켓 서비스 초기화
+  // 웹소켓 연결 및 구독
   useEffect(() => {
-    if (!jwt || jwt.trim() === '') {
-      console.warn('⚠️ JWT 토큰이 없어 웹소켓 연결을 시도하지 않습니다.');
+    if (!jwt || jwt.trim() === '' || !roomId) {
+      console.warn(
+        '⚠️ JWT 토큰 또는 roomId가 없어 웹소켓 연결을 시도하지 않습니다.'
+      );
       return;
     }
 
-    console.log('🔧 웹소켓 서비스 초기화:', {
+    if (!autoConnect) return;
+
+    console.log('🔧 웹소켓 연결 시작:', {
       jwtLength: jwt.length,
       jwtPrefix: jwt.substring(0, 20) + '...',
       roomId,
     });
 
-    wsServiceRef.current = new WebSocketService(jwt);
+    setStatus('connecting');
+    setError(null);
 
-    // 상태 변경 리스너 등록
-    unsubscribeRef.current = wsServiceRef.current.onStatusChange(
-      (newStatus) => {
-        console.log('🔄 웹소켓 상태 변경:', {
-          from: status,
-          to: newStatus,
-          isConnected: newStatus === 'connected',
+    const connectAndSubscribe = async () => {
+      try {
+        const unsubscribe = await subscribeRoomSock(roomId, (message) => {
+          console.log('📨 새 메시지 수신:', message);
+          setMessages((prev) => [...prev, message]);
         });
-        setStatus(newStatus);
-        if (newStatus === 'error') {
-          setError('웹소켓 연결에 문제가 발생했습니다.');
-        } else {
-          setError(null);
-        }
+
+        unsubscribeRef.current = unsubscribe;
+        setStatus('connected');
+        console.log('✅ 웹소켓 연결 및 구독 완료');
+      } catch (err) {
+        console.error('❌ 웹소켓 연결 실패:', err);
+        setStatus('error');
+        setError('웹소켓 연결에 실패했습니다.');
       }
-    );
+    };
+
+    connectAndSubscribe();
 
     return () => {
-      console.log('🧹 웹소켓 서비스 정리 중...');
+      console.log('🧹 웹소켓 정리 중...');
       if (unsubscribeRef.current) {
         unsubscribeRef.current();
       }
-      if (wsServiceRef.current) {
-        wsServiceRef.current.disconnect();
-      }
+      disconnectSock();
     };
-  }, [jwt, roomId]);
-
-  // 자동 연결
-  useEffect(() => {
-    if (autoConnect && wsServiceRef.current && status === 'disconnected') {
-      connect();
-    }
-  }, [autoConnect, status]);
-
-  // 채팅방 구독
-  useEffect(() => {
-    if (wsServiceRef.current && roomId && status === 'connected') {
-      wsServiceRef.current.subscribeToRoom(roomId, {
-        onMessage: (message) => {
-          console.log('📨 새 메시지 수신:', message);
-          setMessages((prev) => [...prev, message]);
-        },
-        onReadBoundary: (update) => {
-          console.log('📖 읽음 경계 업데이트:', update);
-          setUnreadCount(update.unreadCount);
-          setLastReadMessageId(update.lastReadMessageId);
-        },
-      });
-
-      // 개인 큐 구독
-      wsServiceRef.current.subscribeToUserQueues({
-        onUserError: (error) => {
-          console.error('❌ 사용자 에러:', error);
-          setError(error.message);
-        },
-        onUserRoomEvent: (event) => {
-          console.log('🔔 방 이벤트:', event);
-          if (event.roomId === roomId) {
-            setUnreadCount(event.unreadCount);
-          }
-        },
-      });
-    }
-  }, [roomId, status]);
+  }, [jwt, roomId, autoConnect]);
 
   const connect = useCallback(async () => {
-    if (!wsServiceRef.current) return;
+    if (!jwt || !roomId) return;
 
     try {
       setError(null);
-      await wsServiceRef.current.connect();
+      setStatus('connecting');
+
+      const unsubscribe = await subscribeRoomSock(roomId, (message) => {
+        console.log('📨 새 메시지 수신:', message);
+        setMessages((prev) => [...prev, message]);
+      });
+
+      unsubscribeRef.current = unsubscribe;
+      setStatus('connected');
     } catch (err) {
       console.error('웹소켓 연결 실패:', err);
       setError('웹소켓 연결에 실패했습니다.');
+      setStatus('error');
     }
-  }, []);
+  }, [jwt, roomId]);
 
   const disconnect = useCallback(() => {
-    if (wsServiceRef.current) {
-      wsServiceRef.current.disconnect();
+    if (unsubscribeRef.current) {
+      unsubscribeRef.current();
     }
+    disconnectSock();
+    setStatus('disconnected');
   }, []);
 
   const sendTextMessage = useCallback(
@@ -155,22 +135,17 @@ export const useWebSocket = ({
       console.log('📤 텍스트 메시지 전송 시도:', {
         content,
         roomId,
-        isConnected: status === 'connected',
-        wsServiceExists: !!wsServiceRef.current,
         status,
       });
 
-      if (wsServiceRef.current && roomId) {
-        // 연결 상태와 관계없이 전송 시도 (STOMP가 자체적으로 처리)
-        console.log('🚀 메시지 전송 중...');
-        wsServiceRef.current.sendTextMessage(roomId, content);
-      } else {
-        console.error('❌ 메시지 전송 실패:', {
-          wsServiceExists: !!wsServiceRef.current,
-          roomId,
-          status,
-          isConnected: status === 'connected',
-        });
+      if (roomId) {
+        try {
+          sendTextSock(roomId, content);
+          console.log('🚀 메시지 전송 완료');
+        } catch (err) {
+          console.error('❌ 메시지 전송 실패:', err);
+          setError('메시지 전송에 실패했습니다.');
+        }
       }
     },
     [roomId, status]
@@ -178,12 +153,13 @@ export const useWebSocket = ({
 
   const sendImageMessage = useCallback(
     (content: string | null, attachmentFileIds: number[]) => {
-      if (wsServiceRef.current && roomId) {
-        wsServiceRef.current.sendImageMessage(
-          roomId,
-          content,
-          attachmentFileIds
-        );
+      if (roomId) {
+        try {
+          sendImageSock(roomId, content || '', attachmentFileIds);
+        } catch (err) {
+          console.error('❌ 이미지 메시지 전송 실패:', err);
+          setError('이미지 메시지 전송에 실패했습니다.');
+        }
       }
     },
     [roomId]
@@ -191,12 +167,13 @@ export const useWebSocket = ({
 
   const sendFileMessage = useCallback(
     (content: string | null, attachmentFileIds: number[]) => {
-      if (wsServiceRef.current && roomId) {
-        wsServiceRef.current.sendFileMessage(
-          roomId,
-          content,
-          attachmentFileIds
-        );
+      if (roomId) {
+        try {
+          sendFileSock(roomId, content || '', attachmentFileIds);
+        } catch (err) {
+          console.error('❌ 파일 메시지 전송 실패:', err);
+          setError('파일 메시지 전송에 실패했습니다.');
+        }
       }
     },
     [roomId]

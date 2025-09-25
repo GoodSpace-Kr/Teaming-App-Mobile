@@ -74,8 +74,14 @@ export default function ChatsScreen() {
     fetchChatRooms();
   }, [retryKey]);
 
-  const handleEnterChatRoom = (roomId: number, role: 'LEADER' | 'MEMBER') => {
-    router.push(`/(tabs)/chats/chat-room/${roomId}?role=${role}`);
+  const handleEnterChatRoom = (
+    roomId: number,
+    role: 'LEADER' | 'MEMBER',
+    success: boolean
+  ) => {
+    router.push(
+      `/(tabs)/chats/chat-room/${roomId}?role=${role}&success=${success}`
+    );
   };
 
   // 시간 포맷팅 함수
@@ -140,7 +146,9 @@ export default function ChatsScreen() {
             <TouchableOpacity
               key={room.roomId}
               style={styles.chatRoomCard}
-              onPress={() => handleEnterChatRoom(room.roomId, room.role)}
+              onPress={() =>
+                handleEnterChatRoom(room.roomId, room.role, room.success)
+              }
             >
               <View style={styles.chatRoomContent}>
                 {/* 채팅방 아이콘 */}
@@ -176,14 +184,21 @@ export default function ChatsScreen() {
                       <Text style={styles.roomTitle} numberOfLines={1}>
                         {room.title}
                       </Text>
-                      {room.role === 'LEADER' && (
-                        <View style={styles.leaderBadge}>
-                          <Ionicons name="star" size={12} color="#FFD700" />
-                          <Text style={styles.leaderText}>팀장</Text>
+                      {room.success && (
+                        <View style={styles.completionBadge}>
+                          <Ionicons
+                            name="checkmark"
+                            size={14}
+                            color="#FFFFFF"
+                          />
                         </View>
                       )}
                     </View>
-                    <Text style={styles.memberCount}>{room.memberCount}명</Text>
+                    <View style={styles.rightInfoContainer}>
+                      <Text style={styles.memberCount}>
+                        {room.memberCount}명
+                      </Text>
+                    </View>
                   </View>
 
                   {room.lastMessage ? (
@@ -238,6 +253,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     marginBottom: 8,
+    position: 'relative',
   },
   chatRoomContent: {
     flexDirection: 'row',
@@ -375,26 +391,24 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-  leaderBadge: {
-    flexDirection: 'row',
+  completionBadge: {
+    width: 16,
+    height: 16,
+    borderRadius: 10,
+    backgroundColor: '#007AFF',
     alignItems: 'center',
-    backgroundColor: '#FFD700',
-    borderRadius: 8,
-    paddingVertical: 2,
-    marginLeft: 8,
     marginBottom: 5,
-    paddingRight: 11,
+    justifyContent: 'center',
+    marginLeft: 8,
   },
-  leaderText: {
-    fontSize: 10,
-    color: '#000000',
-    fontWeight: '600',
+  rightInfoContainer: {
+    alignItems: 'flex-end',
   },
   memberCount: {
     fontSize: 12,
     color: '#888888',
-    marginLeft: 8,
   },
+
   timeContainer: {
     alignItems: 'flex-end',
     justifyContent: 'center',

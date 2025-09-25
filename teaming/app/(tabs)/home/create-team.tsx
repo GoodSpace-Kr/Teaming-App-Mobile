@@ -130,7 +130,7 @@ export default function CreateTeamScreen() {
           .replace(/appScheme:\s*['"`][^'"`]*['"`]/g, "appScheme: 'teaming://'")
           .replace(
             /returnUrl:\s*['"`][^'"`]*['"`]/g,
-            "returnUrl: 'http://13.125.193.243:8080/payment/request?redirect=teaming://payment-success'"
+            "returnUrl: 'https://teamingkr.duckdns.org/api/payment/request?redirect=teaming://payment-success'"
           );
 
         console.log('🔧 수정된 HTML:', paymentHtmlResponse);
