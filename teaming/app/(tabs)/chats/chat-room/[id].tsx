@@ -20,9 +20,17 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import ChatBubble from '@/src/components/ChatBubble';
-import { useWebSocket } from '@/src/hooks/useWebSocket';
 import { getAccessToken } from '@/src/services/tokenManager';
-import { ChatMessage } from '@/src/services/websocketService';
+import {
+  connectSock,
+  subscribeRoomSock,
+  sendTextSock,
+  sendImageSock,
+  sendFileSock,
+  disconnectSock,
+  updateSockToken,
+  type ChatMessage,
+} from '@/src/services/stompClient';
 import { FileService } from '@/src/services/fileService';
 import { UploadProgress } from '@/src/types/file';
 
@@ -56,6 +64,11 @@ export default function ChatRoomScreen() {
   const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(
     null
   );
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [isConnected, setIsConnected] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<
+    'connecting' | 'connected' | 'disconnected' | 'error'
+  >('disconnected');
   const scrollViewRef = useRef<ScrollView>(null);
 
   // role 정보 로깅
@@ -66,37 +79,72 @@ export default function ChatRoomScreen() {
     }
   }, [role, id]);
 
-  // JWT 토큰 가져오기
+  // JWT 토큰 가져오기 및 STOMP 연결
   useEffect(() => {
-    const loadToken = async () => {
+    const loadTokenAndConnect = async () => {
       try {
         const token = await getAccessToken();
         setJwt(token);
+        console.log(
+          '✅ JWT 토큰 로드 완료:',
+          token ? '토큰 존재' : '토큰 없음'
+        );
+
+        if (token) {
+          // SockJS 연결 시작
+          setConnectionStatus('connecting');
+
+          try {
+            await connectSock(token);
+
+            // connectSock이 성공했다면 연결된 것으로 간주
+            setIsConnected(true);
+            setConnectionStatus('connected');
+            console.log('✅ SockJS 연결 성공');
+
+            // 채팅방 구독 (연결 완료 후 약간의 지연)
+            setTimeout(() => {
+              const unsubscribe = subscribeRoomSock(Number(id), (message) => {
+                console.log('📨 새 메시지 수신:', message);
+                console.log('📨 메시지 타입:', typeof message);
+                console.log(
+                  '📨 메시지 내용:',
+                  JSON.stringify(message, null, 2)
+                );
+                setMessages((prev) => {
+                  console.log('📨 이전 메시지 개수:', prev.length);
+                  const newMessages = [...prev, message];
+                  console.log('📨 새로운 메시지 개수:', newMessages.length);
+                  return newMessages;
+                });
+              });
+
+              // 컴포넌트 언마운트 시 정리
+              return () => {
+                unsubscribe();
+                disconnectSock();
+              };
+            }, 1000);
+          } catch (error) {
+            console.error('SockJS 연결 실패:', error);
+            setConnectionStatus('error');
+            throw error;
+          }
+        }
       } catch (error) {
-        console.error('토큰 로드 실패:', error);
-        Alert.alert('오류', '인증 토큰을 가져올 수 없습니다.');
+        console.error('토큰 로드 또는 연결 실패:', error);
+        setConnectionStatus('error');
+        Alert.alert(
+          '오류',
+          '인증 토큰을 가져올 수 없거나 연결에 실패했습니다.'
+        );
       } finally {
         setIsLoading(false);
       }
     };
-    loadToken();
-  }, []);
 
-  // 웹소켓 연결 (JWT가 있을 때만)
-  const {
-    status,
-    isConnected,
-    messages: wsMessages,
-    unreadCount,
-    sendTextMessage,
-    sendImageMessage,
-    sendFileMessage,
-    error: wsError,
-  } = useWebSocket({
-    jwt: jwt || '',
-    roomId: Number(id),
-    autoConnect: !!jwt,
-  });
+    loadTokenAndConnect();
+  }, [id]);
 
   // 목데이터 - 실제로는 API에서 가져올 데이터
   const chatRoomData: ChatRoomData = {
@@ -107,26 +155,27 @@ export default function ChatRoomScreen() {
     memberCount: '3/4명',
   };
 
-  // 웹소켓 에러 처리
-  useEffect(() => {
-    if (wsError) {
-      Alert.alert('웹소켓 오류', wsError);
-    }
-  }, [wsError]);
-
-  // 메시지 목록을 웹소켓 메시지로 변환
-  const messages = wsMessages.map((wsMsg: ChatMessage) => ({
-    id: wsMsg.messageId,
-    text: wsMsg.content || '',
-    user: wsMsg.sender.name,
-    userImage: wsMsg.sender.avatarUrl
-      ? { uri: wsMsg.sender.avatarUrl }
+  // 메시지 목록을 표시용 메시지로 변환
+  console.log('🔄 현재 메시지 개수:', messages.length);
+  console.log('🔄 현재 메시지들:', messages);
+  const displayMessages = messages.map((msg: ChatMessage) => ({
+    id: msg.messageId || 0,
+    text: msg.content || '',
+    user: msg.sender?.name || 'Unknown',
+    userImage: msg.sender?.avatarUrl
+      ? { uri: msg.sender.avatarUrl }
       : require('../../../../assets/images/(beforeLogin)/bluePeople.png'),
-    timestamp: new Date(wsMsg.createdAt).toLocaleTimeString('ko-KR', {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true,
-    }),
+    timestamp: msg.createdAt
+      ? new Date(msg.createdAt).toLocaleTimeString('ko-KR', {
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true,
+        })
+      : new Date().toLocaleTimeString('ko-KR', {
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true,
+        }),
     isMe: false, // TODO: 현재 사용자 ID와 비교해서 설정
     readCount: 1, // TODO: 실제 읽음 수 구현
   }));
@@ -147,19 +196,22 @@ export default function ChatRoomScreen() {
     console.log('📤 메시지 전송 버튼 클릭:', {
       inputText: inputText.trim(),
       isConnected,
-      status,
-      wsError,
+      connectionStatus,
     });
 
-    if (inputText.trim()) {
-      // 연결 상태와 관계없이 전송 시도
-      sendTextMessage(inputText.trim());
+    if (inputText.trim() && isConnected) {
+      // SockJS 클라이언트로 메시지 전송
+      console.log('📤 메시지 전송 시작:', inputText.trim());
+      sendTextSock(Number(id), inputText.trim());
+      console.log('📤 메시지 전송 완료');
       setInputText('');
 
       // 스크롤을 맨 아래로
       setTimeout(() => {
         scrollViewRef.current?.scrollToEnd({ animated: true });
       }, 100);
+    } else if (!isConnected) {
+      Alert.alert('연결 오류', '웹소켓이 연결되지 않았습니다.');
     }
   };
 
@@ -284,11 +336,11 @@ export default function ChatRoomScreen() {
 
       console.log('✅ 파일 업로드 완료, fileId:', fileId);
 
-      // 웹소켓으로 파일 메시지 전송
+      // SockJS 클라이언트로 파일 메시지 전송
       if (fileType === 'image') {
-        sendImageMessage(fileName, [fileId]);
+        sendImageSock(Number(id), fileName, [fileId]);
       } else {
-        sendFileMessage(fileName, [fileId]);
+        sendFileSock(Number(id), fileName, [fileId]);
       }
 
       Alert.alert('전송 완료', `${fileName}이(가) 전송되었습니다.`);
@@ -312,7 +364,7 @@ export default function ChatRoomScreen() {
   };
 
   const renderMessage = (message: Message, index: number) => {
-    const prevMessage = index > 0 ? messages[index - 1] : null;
+    const prevMessage = index > 0 ? displayMessages[index - 1] : null;
 
     // 카카오톡과 동일한 로직: 같은 사람 + 같은 시간대 = 연속 메시지
     const isSameUser = prevMessage
@@ -405,7 +457,7 @@ export default function ChatRoomScreen() {
             <Text style={styles.statusText}>
               {isConnected
                 ? '연결됨'
-                : status === 'connecting'
+                : connectionStatus === 'connecting'
                 ? '연결 중...'
                 : '연결 끊김'}
             </Text>
@@ -428,7 +480,9 @@ export default function ChatRoomScreen() {
           contentContainerStyle={styles.messagesContent}
           showsVerticalScrollIndicator={false}
         >
-          {messages.map((message, index) => renderMessage(message, index))}
+          {displayMessages.map((message, index) =>
+            renderMessage(message, index)
+          )}
         </ScrollView>
 
         {/* 메시지 입력창 */}
