@@ -92,8 +92,8 @@ export class WebSocketService {
   ) {
     this.jwt = jwt;
     const scheme = useTLS ? 'wss' : 'ws';
-    // 다양한 경로 시도: /ws/websocket, /ws, /websocket
-    const brokerURL = `${scheme}://${host}/ws/websocket`;
+    // React Native에서 안정적인 WebSocket 연결을 위한 URL 설정
+    const WS_URL = `${scheme}://${host}/ws`;
 
     // JWT 토큰 디코딩해서 만료 시간 확인
     try {
@@ -102,7 +102,7 @@ export class WebSocketService {
       const isExpired = payload.exp < now;
 
       console.log('🔌 웹소켓 연결 설정:', {
-        brokerURL,
+        WS_URL,
         jwtLength: jwt.length,
         jwtPrefix: jwt.substring(0, 20) + '...',
         useTLS,
@@ -122,34 +122,16 @@ export class WebSocketService {
       console.error('❌ JWT 토큰 디코딩 실패:', error);
     }
 
+    // RN에서 brokerURL 모드보다 직접 WebSocket을 생성하는 방식이 훨씬 안정적
     this.client = new Client({
-      brokerURL,
-      // 명세서에 따라 Authorization 헤더로 JWT 토큰 전송
+      webSocketFactory: () => new WebSocket(WS_URL, 'v12.stomp'), // ← STOMP 서브프로토콜 명시
       connectHeaders: {
         Authorization: `Bearer ${jwt}`,
       },
-      debug: (str) => {
-        console.log('[STOMP]', str);
-        // STOMP 연결 과정을 더 자세히 로깅
-        if (str.includes('CONNECTED')) {
-          console.log('🎉 STOMP CONNECTED 명령 수신됨!');
-        }
-        if (str.includes('ERROR')) {
-          console.log('❌ STOMP ERROR 명령 수신됨!');
-        }
-        if (str.includes('scheduling reconnection')) {
-          console.log('🔄 STOMP 재연결 스케줄링 중...');
-        }
-        if (str.includes('Web Socket Closed')) {
-          console.log('🔌 WebSocket 연결이 닫혔습니다.');
-        }
-        if (str.includes('Web Socket Error')) {
-          console.log('❌ WebSocket 에러 발생!');
-        }
-      },
-      reconnectDelay: 0, // 재연결 비활성화
+      reconnectDelay: 5000,
       heartbeatIncoming: 10000,
       heartbeatOutgoing: 10000,
+      debug: (s) => console.log('[STOMP]', s),
     });
 
     this.setupEventHandlers();
@@ -162,6 +144,11 @@ export class WebSocketService {
       });
       console.log('🔄 상태를 connected로 변경합니다.');
       this.setStatus('connected');
+
+      // 에러 큐 구독을 onConnect 직후 즉시
+      this.client.subscribe('/user/queue/errors', (m) => {
+        console.log('🚨 USER ERROR:', m.body);
+      });
     };
 
     this.client.onStompError = (frame) => {
@@ -229,8 +216,11 @@ export class WebSocketService {
       console.log('🚀 웹소켓 연결 시작...');
       this.setStatus('connecting');
 
-      // STOMP 클라이언트는 이미 setupEventHandlers에서 이벤트 핸들러가 설정됨
-      // 연결 성공/실패는 onConnect, onStompError, onWebSocketError에서 처리됨
+      // 연결 타임아웃 가드 (5초)
+      let watchdog = setTimeout(() => {
+        reject(new Error('CONNECT 타임아웃: 서버가 CONNECTED를 반환하지 않음'));
+        this.client.deactivate();
+      }, 5000);
 
       // 연결 성공을 감지하기 위한 임시 리스너
       const originalOnConnect = this.client.onConnect;
@@ -238,6 +228,7 @@ export class WebSocketService {
       const originalOnWebSocketError = this.client.onWebSocketError;
 
       this.client.onConnect = (frame: any) => {
+        clearTimeout(watchdog);
         console.log('✅ 웹소켓 연결 완료 (Promise):', frame);
         // 원래 핸들러도 호출
         if (originalOnConnect) {
@@ -247,19 +238,17 @@ export class WebSocketService {
       };
 
       this.client.onStompError = (frame: any) => {
+        clearTimeout(watchdog);
         console.error('❌ STOMP 연결 실패:', frame);
         // 원래 핸들러도 호출
         if (originalOnStompError) {
           originalOnStompError(frame);
         }
-        reject(
-          new Error(
-            `STOMP Error: ${frame.headers['message'] || 'Unknown error'}`
-          )
-        );
+        reject(new Error(`STOMP ERROR: ${frame.headers['message'] || ''}`));
       };
 
       this.client.onWebSocketError = (error: any) => {
+        clearTimeout(watchdog);
         console.error('❌ 웹소켓 연결 실패:', {
           error,
           type: error?.type,
@@ -277,6 +266,7 @@ export class WebSocketService {
         console.log('🔄 STOMP 클라이언트 활성화 중...');
         this.client.activate();
       } catch (error) {
+        clearTimeout(watchdog);
         console.error('❌ STOMP 클라이언트 활성화 실패:', error);
         reject(error);
       }

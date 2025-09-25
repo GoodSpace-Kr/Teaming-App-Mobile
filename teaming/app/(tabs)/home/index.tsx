@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,38 +7,40 @@ import {
   TouchableOpacity,
   Image,
   Dimensions,
+  ActivityIndicator,
 } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
-import { useCallback } from 'react';
+import { getChatRooms, ChatRoom } from '../../../src/services/chatService';
 
 const { width } = Dimensions.get('window');
 
 export default function HomeScreen() {
-  // 홈 탭이 포커스될 때마다 초기화
+  const [teams, setTeams] = useState<ChatRoom[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // 팀 목록 가져오기
+  const loadTeams = async () => {
+    try {
+      setIsLoading(true);
+      const chatRooms = await getChatRooms();
+      setTeams(chatRooms);
+      console.log('✅ 홈 화면 팀 목록 로드 완료:', chatRooms);
+    } catch (error) {
+      console.error('❌ 팀 목록 로드 실패:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // 홈 탭이 포커스될 때마다 팀 목록 새로고침
   useFocusEffect(
     useCallback(() => {
-      // 홈 화면으로 돌아올 때 필요한 초기화 로직
-      console.log('홈 화면 포커스 - 초기화');
+      console.log('홈 화면 포커스 - 팀 목록 새로고침');
+      loadTeams();
     }, [])
   );
-
-  const teams = [
-    {
-      id: 1,
-      title: '정치학 발표',
-      subtitle: '정치학개론',
-      time: '회의 오늘 18:00',
-      members: require('../../../assets/images/(beforeLogin)/bluePeople.png'),
-    },
-    {
-      id: 2,
-      title: '마케팅',
-      subtitle: '디지털마케',
-      members: require('../../../assets/images/(beforeLogin)/purplePeople.png'),
-    },
-  ];
 
   const schedules = [
     {
@@ -66,12 +68,14 @@ export default function HomeScreen() {
     router.push('/(tabs)/home/join-team');
   };
 
-  const handleEnterTeam = (teamId: number) => {
-    // 채팅방 목록을 거쳐서 채팅방으로 이동 (팀원으로)
+  const handleEnterTeam = (roomId: number, role: 'LEADER' | 'MEMBER') => {
+    // 채팅방 목록을 거쳐서 채팅방으로 이동
     router.push('/(tabs)/chats');
     // 약간의 지연 후 채팅방으로 이동
     setTimeout(() => {
-      router.push(`/(tabs)/chats/chat-room/${teamId}?isLeader=false`);
+      router.push(
+        `/(tabs)/chats/chat-room/${roomId}?isLeader=${role === 'LEADER'}`
+      );
     }, 100);
   };
 
@@ -127,32 +131,85 @@ export default function HomeScreen() {
         {/* 내 팀 한눈에 */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>내 팀 한눈에</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.teamScrollContainer}
-          >
-            {teams.map((team) => (
-              <View key={team.id} style={styles.teamCard}>
-                <View style={styles.teamCardHeader}>
-                  <Image source={team.members} style={styles.teamIcon} />
-                  <View style={styles.teamInfo}>
-                    <Text style={styles.teamTitle}>{team.title}</Text>
-                    <Text style={styles.teamSubtitle}>{team.subtitle}</Text>
+          {isLoading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="small" color="#007AFF" />
+              <Text style={styles.loadingText}>팀 목록을 불러오는 중...</Text>
+            </View>
+          ) : teams.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>참여 중인 팀이 없습니다.</Text>
+              <Text style={styles.emptySubtext}>
+                팀을 만들거나 초대코드를 입력해보세요!
+              </Text>
+            </View>
+          ) : (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.teamScrollContainer}
+            >
+              {teams.map((team) => (
+                <View key={team.roomId} style={styles.teamCard}>
+                  {/* 역할 표시 - 우측 상단 */}
+                  <View style={styles.roleContainer}>
+                    <Text
+                      style={[
+                        styles.teamRole,
+                        {
+                          color: team.role === 'LEADER' ? '#FFD700' : '#4A90E2',
+                        },
+                      ]}
+                    >
+                      {team.role === 'LEADER' ? '팀장' : '팀원'}
+                    </Text>
                   </View>
-                  {team.time && (
-                    <Text style={styles.teamTime}>{team.time}</Text>
-                  )}
+
+                  <View style={styles.teamCardHeader}>
+                    {/* 팀 이미지 또는 기본 아이콘 */}
+                    {team.imageKey ? (
+                      <Image
+                        source={{
+                          uri: `https://your-cdn-url.com/${team.imageKey}`,
+                        }}
+                        style={styles.teamIcon}
+                      />
+                    ) : (
+                      <View style={styles.defaultTeamIcon}>
+                        <Ionicons name="people" size={20} color="#007AFF" />
+                      </View>
+                    )}
+
+                    <View style={styles.teamInfo}>
+                      <Text style={styles.teamTitle}>{team.title}</Text>
+                      <Text style={styles.teamSubtitle}>
+                        {team.type} • {team.memberCount}명
+                      </Text>
+                    </View>
+
+                    {/* 마지막 메시지 시간 */}
+                    {team.lastMessage && (
+                      <Text style={styles.teamTime}>
+                        {new Date(
+                          team.lastMessage.createdAt
+                        ).toLocaleTimeString('ko-KR', {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </Text>
+                    )}
+                  </View>
+
+                  <TouchableOpacity
+                    style={styles.enterButton}
+                    onPress={() => handleEnterTeam(team.roomId, team.role)}
+                  >
+                    <Text style={styles.enterButtonText}>들어가기</Text>
+                  </TouchableOpacity>
                 </View>
-                <TouchableOpacity
-                  style={styles.enterButton}
-                  onPress={() => handleEnterTeam(team.id)}
-                >
-                  <Text style={styles.enterButtonText}>들어가기</Text>
-                </TouchableOpacity>
-              </View>
-            ))}
-          </ScrollView>
+              ))}
+            </ScrollView>
+          )}
         </View>
 
         {/* 일정 한눈에 */}
@@ -281,6 +338,7 @@ const styles = StyleSheet.create({
     marginRight: 12,
     width: width * 0.7,
     minHeight: 120,
+    position: 'relative',
   },
   teamCardHeader: {
     flexDirection: 'row',
@@ -355,5 +413,53 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     flex: 1,
     lineHeight: 20,
+  },
+  loadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 20,
+  },
+  loadingText: {
+    color: '#CCCCCC',
+    marginLeft: 8,
+    fontSize: 14,
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  emptyText: {
+    color: '#CCCCCC',
+    fontSize: 16,
+    marginBottom: 8,
+  },
+  emptySubtext: {
+    color: '#888888',
+    fontSize: 14,
+  },
+  defaultTeamIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#1A1A1A',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  roleContainer: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    zIndex: 1,
+  },
+  teamRole: {
+    fontSize: 12,
+    fontWeight: '600',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    overflow: 'hidden',
   },
 });

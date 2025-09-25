@@ -58,6 +58,7 @@ export default function GoogleLoginAuthSession({
           await saveTokens({
             accessToken: data.accessToken,
             refreshToken: data.refreshToken,
+            loginType: 'google',
             user: data.user,
           });
           onLoginSuccess(data);

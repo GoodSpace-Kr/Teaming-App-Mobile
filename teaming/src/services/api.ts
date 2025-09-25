@@ -298,4 +298,19 @@ export const updatePassword = async (
   }
 };
 
+// 결제 API
+export const createPayment = async (amount: number): Promise<string> => {
+  try {
+    console.log('🚀 결제 API 요청 - amount:', amount);
+    const response = await apiClient.get<string>('/payment/html', {
+      params: { amount },
+    });
+    console.log('✅ 결제 API 성공:', response.data);
+    return response.data;
+  } catch (error: any) {
+    console.error('❌ 결제 API 실패:', error);
+    throw error;
+  }
+};
+
 export default apiClient;
