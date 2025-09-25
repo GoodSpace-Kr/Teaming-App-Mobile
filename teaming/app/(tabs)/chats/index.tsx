@@ -16,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { getChatRooms, ChatRoom } from '../../../src/services/chatService';
 import { useWebSocket } from '../../../src/hooks/useWebSocket';
 import { getAccessToken } from '../../../src/services/tokenManager';
+import { subscribeRoomSock } from '../../../src/services/stompClient';
 
 const { width } = Dimensions.get('window');
 
@@ -44,6 +45,55 @@ export default function ChatsScreen() {
     jwt: jwt || '',
     autoConnect: !!jwt,
   });
+
+  // 웹소켓을 통한 실시간 메시지 수신 및 lastMessage 업데이트
+  useEffect(() => {
+    if (!jwt || !isConnected) return;
+
+    // 모든 채팅방에 대해 웹소켓 구독
+    const unsubscribes: (() => void)[] = [];
+
+    chatRooms.forEach((room) => {
+      const unsubscribe = subscribeRoomSock(room.roomId, (message) => {
+        console.log('📨 채팅방 목록에서 메시지 수신:', message);
+
+        // 해당 채팅방의 lastMessage 업데이트
+        setChatRooms((prevRooms) =>
+          prevRooms.map((prevRoom) => {
+            if (prevRoom.roomId === room.roomId) {
+              const lastMessage = {
+                id: message.messageId || 0,
+                type: (message.type === 'VIDEO' || message.type === 'AUDIO'
+                  ? 'FILE'
+                  : message.type === 'SYSTEM_NOTICE'
+                  ? 'SYSTEM'
+                  : message.type || 'TEXT') as
+                  | 'TEXT'
+                  | 'IMAGE'
+                  | 'FILE'
+                  | 'SYSTEM',
+                content: message.content || '',
+                sender: (message.sender || {
+                  id: 0,
+                  name: 'Unknown',
+                  avatarUrl: '',
+                  avatarVersion: 0,
+                }) as any,
+                createdAt: message.createdAt || new Date().toISOString(),
+              };
+              return { ...prevRoom, lastMessage };
+            }
+            return prevRoom;
+          })
+        );
+      });
+      unsubscribes.push(unsubscribe);
+    });
+
+    return () => {
+      unsubscribes.forEach((unsubscribe) => unsubscribe());
+    };
+  }, [jwt, isConnected, chatRooms]);
 
   // 채팅방 탭이 포커스될 때마다 초기화 및 데이터 새로고침
   useFocusEffect(

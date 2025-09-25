@@ -92,11 +92,32 @@ export default function ChatMenuScreen() {
     setShowLeaveModal(true);
   };
 
-  const handleConfirmLeave = () => {
-    // 모달 닫기
-    setShowLeaveModal(false);
-    // 홈 화면으로 이동
-    router.push('/(tabs)/home');
+  const handleConfirmLeave = async () => {
+    if (!roomId) return;
+
+    try {
+      // 모달 닫기
+      setShowLeaveModal(false);
+
+      console.log('🚀 방 떠나기 API 호출 - roomId:', roomId);
+
+      // 방 떠나기 API 호출
+      await apiService.leaveRoom(Number(roomId));
+
+      console.log('✅ 방 떠나기 성공');
+
+      // 성공 시 홈 화면으로 이동
+      router.push('/(tabs)/home');
+    } catch (error: any) {
+      console.error('❌ 방 떠나기 실패:', error);
+
+      // 에러 발생 시 사용자에게 알림
+      Alert.alert(
+        '오류',
+        '방을 떠나는 중 오류가 발생했습니다.\n다시 시도해주세요.',
+        [{ text: '확인' }]
+      );
+    }
   };
 
   const handleCancelLeave = () => {
@@ -262,34 +283,34 @@ export default function ChatMenuScreen() {
           ))}
         </View>
 
-        {/* 팀플 완료 또는 나가기 (팀장만) */}
-        {isTeamLeader && (
-          <View style={styles.section}>
-            {isTeamCompleted ? (
-              <TouchableOpacity
-                style={styles.leaveButton}
-                onPress={handleLeaveRoom}
-              >
-                <View style={styles.leaveIcon}>
-                  <Ionicons name="exit" size={24} color="#FF3B30" />
-                </View>
-                <Text style={styles.leaveText}>티밍룸 나가기</Text>
-                <Ionicons name="chevron-forward" size={20} color="#666666" />
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity
-                style={styles.completeButton}
-                onPress={handleCompleteTeam}
-              >
-                <View style={styles.completeIcon}>
-                  <Ionicons name="trophy" size={24} color="#FFD700" />
-                </View>
-                <Text style={styles.completeText}>팀플 완료</Text>
-                <Ionicons name="chevron-forward" size={20} color="#666666" />
-              </TouchableOpacity>
-            )}
-          </View>
-        )}
+        {/* 팀플 완료 또는 나가기 */}
+        <View style={styles.section}>
+          {isTeamCompleted ? (
+            // 팀플 완료 후 - 모든 사용자가 방을 떠날 수 있음
+            <TouchableOpacity
+              style={styles.leaveButton}
+              onPress={handleLeaveRoom}
+            >
+              <View style={styles.leaveIcon}>
+                <Ionicons name="exit" size={24} color="#FF3B30" />
+              </View>
+              <Text style={styles.leaveText}>티밍룸 나가기</Text>
+              <Ionicons name="chevron-forward" size={20} color="#666666" />
+            </TouchableOpacity>
+          ) : isTeamLeader ? (
+            // 팀플 완료 전 - 팀장만 팀플 완료 가능
+            <TouchableOpacity
+              style={styles.completeButton}
+              onPress={handleCompleteTeam}
+            >
+              <View style={styles.completeIcon}>
+                <Ionicons name="trophy" size={24} color="#FFD700" />
+              </View>
+              <Text style={styles.completeText}>팀플 완료</Text>
+              <Ionicons name="chevron-forward" size={20} color="#666666" />
+            </TouchableOpacity>
+          ) : null}
+        </View>
       </ScrollView>
       {/* 팀플 완료 확인 모달 */}
       <CompleteTeamModal
@@ -305,6 +326,33 @@ export default function ChatMenuScreen() {
         onClose={handleSuccessModalClose}
         teamName="정치학 발표"
       />
+
+      {/* 방 떠나기 확인 모달 */}
+      {showLeaveModal && (
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <Text style={styles.modalTitle}>티밍룸 나가기</Text>
+            <Text style={styles.modalMessage}>
+              정말로 이 티밍룸을 떠나시겠습니까?{'\n'}
+              방을 떠나면 다시 들어올 수 없습니다.
+            </Text>
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={styles.modalCancelButton}
+                onPress={handleCancelLeave}
+              >
+                <Text style={styles.modalCancelText}>취소</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.modalConfirmButton}
+                onPress={handleConfirmLeave}
+              >
+                <Text style={styles.modalConfirmText}>나가기</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -462,6 +510,71 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 16,
     color: '#FFD700',
+    fontWeight: '500',
+  },
+  modalOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  modalContainer: {
+    backgroundColor: '#121216',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#292929',
+    padding: 24,
+    marginHorizontal: 20,
+    minWidth: 280,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  modalMessage: {
+    fontSize: 16,
+    color: '#CCCCCC',
+    textAlign: 'center',
+    lineHeight: 24,
+    marginBottom: 24,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  modalCancelButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    backgroundColor: '#292929',
+    alignItems: 'center',
+  },
+  modalCancelText: {
+    fontSize: 16,
+    color: '#FFFFFF',
+    fontWeight: '500',
+  },
+  modalConfirmButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    backgroundColor: '#FF3B30',
+    alignItems: 'center',
+  },
+  modalConfirmText: {
+    fontSize: 16,
+    color: '#FFFFFF',
     fontWeight: '500',
   },
 });

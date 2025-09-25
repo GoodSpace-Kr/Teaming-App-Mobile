@@ -13,8 +13,8 @@ export default function ChatsLayout() {
       <Stack.Screen
         name="chat-room/[id]"
         options={{
-          title: '티밍 톡',
           headerShown: false,
+          header: () => null, // 헤더를 완전히 제거
         }}
       />
       <Stack.Screen

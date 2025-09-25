@@ -73,21 +73,6 @@ export const searchRoomByInviteCode = async (
   }
 };
 
-/**
- * 팀 정보 가져오기
- */
-export const getTeamInfo = async (roomId: number) => {
-  try {
-    console.log(`🚀 팀 ${roomId} 정보 요청 중...`);
-    const response = await apiClient.get(`/rooms/${roomId}`);
-    console.log('✅ 팀 정보 응답:', response.data);
-    return response.data;
-  } catch (error) {
-    console.error(`❌ 팀 ${roomId} 정보 가져오기 실패:`, error);
-    throw error;
-  }
-};
-
 // 초대코드로 팀 참여 API
 export interface JoinTeamRequest {
   inviteCode: string;

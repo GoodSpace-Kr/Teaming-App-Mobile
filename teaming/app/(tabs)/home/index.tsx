@@ -68,13 +68,17 @@ export default function HomeScreen() {
     router.push('/(tabs)/home/join-team');
   };
 
-  const handleEnterTeam = (roomId: number, role: 'LEADER' | 'MEMBER') => {
+  const handleEnterTeam = (
+    roomId: number,
+    role: 'LEADER' | 'MEMBER',
+    success: boolean
+  ) => {
     // 채팅방 목록을 거쳐서 채팅방으로 이동
     router.push('/(tabs)/chats');
     // 약간의 지연 후 채팅방으로 이동
     setTimeout(() => {
       router.push(
-        `/(tabs)/chats/chat-room/${roomId}?isLeader=${role === 'LEADER'}`
+        `/(tabs)/chats/chat-room/${roomId}?role=${role}&success=${success}`
       );
     }, 100);
   };
@@ -200,9 +204,32 @@ export default function HomeScreen() {
                     )}
                   </View>
 
+                  {/* 팀플 완료 상태 표시 - 좌측 하단 */}
+                  <View style={styles.completionStatusContainer}>
+                    <View
+                      style={[
+                        styles.completionStatusBadge,
+                        {
+                          backgroundColor: team.success ? '#4CAF50' : '#FF9800',
+                        },
+                      ]}
+                    >
+                      <Ionicons
+                        name={team.success ? 'checkmark-circle' : 'time'}
+                        size={12}
+                        color="#FFFFFF"
+                      />
+                      <Text style={styles.completionStatusText}>
+                        {team.success ? '완료' : '진행중'}
+                      </Text>
+                    </View>
+                  </View>
+
                   <TouchableOpacity
                     style={styles.enterButton}
-                    onPress={() => handleEnterTeam(team.roomId, team.role)}
+                    onPress={() =>
+                      handleEnterTeam(team.roomId, team.role, team.success)
+                    }
                   >
                     <Text style={styles.enterButtonText}>들어가기</Text>
                   </TouchableOpacity>
@@ -384,6 +411,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.4,
     shadowRadius: 6,
     elevation: 4,
+    marginTop: 20,
   },
   enterButtonText: {
     fontSize: 14,
@@ -461,5 +489,24 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 12,
     overflow: 'hidden',
+  },
+  completionStatusContainer: {
+    position: 'absolute',
+    bottom: 19,
+    left: 20,
+    zIndex: 1,
+  },
+  completionStatusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 4,
+  },
+  completionStatusText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
 });

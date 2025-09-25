@@ -302,4 +302,84 @@ export const completeTeamProject = async (roomId: number): Promise<void> => {
   }
 };
 
+// 방 떠나기 API
+export const leaveRoom = async (roomId: number): Promise<void> => {
+  try {
+    console.log('🚀 방 떠나기 API 요청 - roomId:', roomId);
+    const response = await apiClient.delete(`/rooms/${roomId}`);
+    console.log('✅ 방 떠나기 성공:', response.data);
+  } catch (error: any) {
+    console.error('❌ 방 떠나기 실패:', error);
+    throw error;
+  }
+};
+
+// 메시지 히스토리 조회 API
+export interface MessageHistoryResponse {
+  items: ChatMessage[];
+  hasNext: boolean;
+  nextCursor: number | null;
+}
+
+export interface ChatMessage {
+  messageId: number;
+  roomId: number;
+  clientMessageId: string;
+  type: 'TEXT' | 'IMAGE' | 'FILE' | 'SYSTEM_NOTICE';
+  content: string;
+  createdAt: string;
+  sender: {
+    id: number;
+    name: string;
+    avatarUrl: string;
+    avatarVersion: number;
+  };
+  attachments?: Attachment[];
+}
+
+export interface Attachment {
+  fileId: number;
+  uploaderId: number;
+  sortOrder: number;
+  name: string;
+  type: 'IMAGE' | 'FILE';
+  mimeType: string;
+  byteSize: number;
+  width?: number;
+  height?: number;
+  durationMs?: number;
+  previewUrl: string;
+  thumbnailUrl: string;
+  downloadUrl: string;
+  antiVirusScanStatus: 'PENDING' | 'CLEAN' | 'INFECTED';
+  transcodeStatus: 'NONE' | 'PENDING' | 'COMPLETED' | 'FAILED';
+  ready: boolean;
+}
+
+export const getMessageHistory = async (
+  roomId: number,
+  cursor: number | null = null,
+  limit: number = 50
+): Promise<MessageHistoryResponse> => {
+  try {
+    console.log('🚀 메시지 히스토리 조회 API 요청:', { roomId, cursor, limit });
+
+    const params: any = { limit };
+    if (cursor !== null) {
+      params.cursor = cursor;
+    }
+
+    const response = await apiClient.get<MessageHistoryResponse>(
+      `/rooms/${roomId}/messages`,
+      { params }
+    );
+
+    console.log('✅ 메시지 히스토리 조회 성공:', response.data);
+    return response.data;
+  } catch (error: any) {
+    console.error('❌ 메시지 히스토리 조회 실패:', error);
+    throw error;
+  }
+};
+
 export default apiClient;

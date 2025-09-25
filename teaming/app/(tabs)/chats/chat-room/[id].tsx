@@ -33,6 +33,10 @@ import {
 } from '@/src/services/stompClient';
 import { FileService } from '@/src/services/fileService';
 import { UploadProgress } from '@/src/types/file';
+import {
+  getMessageHistory,
+  type ChatMessage as ApiChatMessage,
+} from '@/src/services/api';
 
 const { width, height } = Dimensions.get('window');
 
@@ -43,7 +47,7 @@ interface Message {
   userImage?: any;
   timestamp: string;
   isMe: boolean;
-  readCount: number;
+  readCount?: number; // 선택적 속성으로 변경 (나중에 사용 예정)
 }
 
 interface ChatRoomData {
@@ -88,6 +92,45 @@ export default function ChatRoomScreen() {
     }
   };
 
+  // 메시지 히스토리 로드 함수
+  const loadMessageHistory = async () => {
+    if (!id) return;
+
+    try {
+      console.log('🚀 메시지 히스토리 로드 시작 - roomId:', id);
+      const historyResponse = await getMessageHistory(Number(id));
+
+      // API 응답을 STOMP 메시지 형식으로 변환
+      const historyMessages: ChatMessage[] = historyResponse.items.map(
+        (apiMessage: ApiChatMessage) => ({
+          messageId: apiMessage.messageId,
+          roomId: apiMessage.roomId,
+          clientMessageId: apiMessage.clientMessageId,
+          type: apiMessage.type,
+          content: apiMessage.content,
+          createdAt: apiMessage.createdAt,
+          sender: apiMessage.sender,
+          attachments: apiMessage.attachments || [],
+        })
+      );
+
+      console.log(
+        '✅ 메시지 히스토리 로드 완료:',
+        historyMessages.length,
+        '개'
+      );
+      setMessages(historyMessages);
+
+      // 히스토리 로드 후 스크롤을 맨 아래로
+      setTimeout(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: false });
+      }, 200);
+    } catch (error) {
+      console.error('❌ 메시지 히스토리 로드 실패:', error);
+      // 에러가 발생해도 웹소켓 연결은 계속 진행
+    }
+  };
+
   // role 및 success 정보 로깅
   useEffect(() => {
     if (role) {
@@ -121,6 +164,9 @@ export default function ChatRoomScreen() {
         }
 
         if (token) {
+          // 메시지 히스토리 로드 (웹소켓 연결과 병렬로 실행)
+          loadMessageHistory();
+
           // SockJS 연결 시작
           setConnectionStatus('connecting');
 
@@ -144,8 +190,36 @@ export default function ChatRoomScreen() {
                 );
                 setMessages((prev) => {
                   console.log('📨 이전 메시지 개수:', prev.length);
-                  const newMessages = [...prev, message];
+
+                  // 중복 메시지 체크 (messageId로 확인)
+                  const isDuplicate = prev.some(
+                    (existingMessage) =>
+                      existingMessage.messageId === message.messageId
+                  );
+
+                  if (isDuplicate) {
+                    console.log('📨 중복 메시지 무시:', message.messageId);
+                    return prev;
+                  }
+
+                  // 새 메시지 추가 후 시간순으로 정렬
+                  const newMessages = [...prev, message].sort((a, b) => {
+                    const timeA = a.createdAt
+                      ? new Date(a.createdAt).getTime()
+                      : 0;
+                    const timeB = b.createdAt
+                      ? new Date(b.createdAt).getTime()
+                      : 0;
+                    return timeA - timeB;
+                  });
+
                   console.log('📨 새로운 메시지 개수:', newMessages.length);
+
+                  // 새 메시지가 추가되면 자동으로 스크롤을 맨 아래로
+                  setTimeout(() => {
+                    scrollViewRef.current?.scrollToEnd({ animated: true });
+                  }, 100);
+
                   return newMessages;
                 });
               });
@@ -211,10 +285,11 @@ export default function ChatRoomScreen() {
           hour12: true,
         }),
     isMe: currentUserId !== null && msg.sender?.id === currentUserId, // 현재 사용자 ID와 비교
-    readCount: 1, // TODO: 실제 읽음 수 구현
+    // readCount: 1, // TODO: 실제 읽음 수 구현 - 주석 처리 (나중에 사용 예정)
   }));
 
   const handleBackPress = () => {
+    // 좌측 슬라이드 애니메이션으로 뒤로가기
     router.back();
   };
 
@@ -430,7 +505,7 @@ export default function ChatRoomScreen() {
           showTail={showTail}
           isContinuous={isContinuous}
           timestamp={message.timestamp}
-          readCount={message.readCount}
+          // readCount={message.readCount} // 주석 처리 (나중에 사용 예정)
           backgroundColor={message.isMe ? '#007AFF' : '#333333'}
           textColor="#FFFFFF"
         />
@@ -645,6 +720,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 60,
     paddingBottom: 16,
+    backgroundColor: '#000000', // 헤더 배경색을 검은색으로 설정
     borderBottomWidth: 1,
     borderBottomColor: '#292929',
   },
