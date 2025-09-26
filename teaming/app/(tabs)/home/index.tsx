@@ -188,7 +188,7 @@ export default function HomeScreen() {
                     <View style={styles.teamInfo}>
                       <Text style={styles.teamTitle}>{team.title}</Text>
                       <Text style={styles.teamSubtitle}>
-                        {team.type} • {team.memberCount}명
+                        {team.type.typeName} • {team.memberCount}명
                       </Text>
                     </View>
 

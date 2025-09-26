@@ -1,5 +1,4 @@
 import apiClient from './api';
-import * as Crypto from 'expo-crypto';
 import * as ImageManipulator from 'expo-image-manipulator';
 
 /**
@@ -8,7 +7,7 @@ import * as ImageManipulator from 'expo-image-manipulator';
 export interface AvatarUploadIntentRequest {
   contentType: string;
   byteSize: number;
-  checksumSha256Base64: string;
+  ownerType: 'USER' | 'ROOM';
 }
 
 export interface AvatarUploadIntentResponse {
@@ -24,6 +23,7 @@ export interface AvatarUploadCompleteRequest {
   key: string;
   width: number;
   height: number;
+  ownerType: 'USER' | 'ROOM';
 }
 
 export interface AvatarUploadCompleteResponse {
@@ -32,56 +32,11 @@ export interface AvatarUploadCompleteResponse {
   publicUrl: string;
 }
 
-export interface AvatarUrlResponse {
-  url: string;
-}
-
 /**
  * 아바타 업로드 서비스
  * S3 업로드를 위한 3단계 프로세스 구현
  */
 export class AvatarService {
-  /**
-   * 1단계: 아바타 URL 발급 (현재 아바타 URL 가져오기)
-   * @returns 현재 아바타 URL
-   */
-  static async getAvatarUrl(): Promise<AvatarUrlResponse> {
-    try {
-      console.log('🚀 아바타 URL 발급 요청');
-
-      const response = await apiClient.post<AvatarUrlResponse>(
-        '/users/me/avatar/url'
-      );
-
-      console.log('✅ 아바타 URL 발급 성공:', response.data);
-      return response.data;
-    } catch (error: any) {
-      console.error('❌ 아바타 URL 발급 실패:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * 다른 사용자의 아바타 URL 발급
-   * @param userId 사용자 ID
-   * @returns 사용자 아바타 URL
-   */
-  static async getUserAvatarUrl(userId: number): Promise<AvatarUrlResponse> {
-    try {
-      console.log('🚀 사용자 아바타 URL 발급 요청:', userId);
-
-      const response = await apiClient.post<AvatarUrlResponse>(
-        `/users/${userId}/avatar/url`
-      );
-
-      console.log('✅ 사용자 아바타 URL 발급 성공:', response.data);
-      return response.data;
-    } catch (error: any) {
-      console.error('❌ 사용자 아바타 URL 발급 실패:', error);
-      throw error;
-    }
-  }
-
   /**
    * 2단계: 아바타 업로드 의도 등록 (Presigned PUT URL 발급)
    * @param fileInfo 파일 정보
@@ -159,50 +114,27 @@ export class AvatarService {
    * @param key S3 파일 키
    * @param width 이미지 너비
    * @param height 이미지 높이
+   * @param ownerType 소유자 타입
    * @returns 아바타 정보
    */
   static async completeUpload(
     key: string,
     width: number,
-    height: number
+    height: number,
+    ownerType: 'USER' | 'ROOM'
   ): Promise<AvatarUploadCompleteResponse> {
     try {
       console.log('🚀 아바타 업로드 완료 확인:', { key, width, height });
 
       const response = await apiClient.post<AvatarUploadCompleteResponse>(
         '/users/me/avatar/complete',
-        { key, width, height }
+        { key, width, height, ownerType }
       );
 
       console.log('✅ 아바타 업로드 완료 확인 성공:', response.data);
       return response.data;
     } catch (error: any) {
       console.error('❌ 아바타 업로드 완료 확인 실패:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * 파일에서 SHA-256 체크섬 계산
-   * @param fileUri 파일 URI
-   * @returns Base64 인코딩된 SHA-256 체크섬
-   */
-  static async calculateChecksum(fileUri: string): Promise<string> {
-    try {
-      const response = await fetch(fileUri);
-      const arrayBuffer = await response.arrayBuffer();
-
-      // 바이트 배열을 직접 해시 계산
-      const hashBuffer = await Crypto.digestStringAsync(
-        Crypto.CryptoDigestAlgorithm.SHA256,
-        Array.from(new Uint8Array(arrayBuffer))
-          .map((b) => b.toString(16).padStart(2, '0'))
-          .join(''),
-        { encoding: Crypto.CryptoEncoding.BASE64 }
-      );
-      return hashBuffer;
-    } catch (error) {
-      console.error('❌ 체크섬 계산 실패:', error);
       throw error;
     }
   }
@@ -258,10 +190,12 @@ export class AvatarService {
   /**
    * 전체 아바타 업로드 프로세스 (4단계 통합)
    * @param imageUri 로컬 이미지 URI
+   * @param ownerType 소유자 타입 (USER: 사용자 아바타, ROOM: 채팅방 이미지)
    * @returns 아바타 정보
    */
   static async uploadAvatar(
-    imageUri: string
+    imageUri: string,
+    ownerType: 'USER' | 'ROOM' = 'USER'
   ): Promise<AvatarUploadCompleteResponse> {
     try {
       console.log('🚀 아바타 업로드 프로세스 시작:', imageUri);
@@ -269,14 +203,11 @@ export class AvatarService {
       // 이미지 최적화
       const optimizedImage = await this.optimizeImage(imageUri);
 
-      // 체크섬 계산
-      const checksum = await this.calculateChecksum(optimizedImage.uri);
-
       // 1단계: 업로드 의도 등록
       const intentResponse = await this.getUploadIntent({
         contentType: 'image/jpeg',
         byteSize: optimizedImage.size,
-        checksumSha256Base64: checksum,
+        ownerType: ownerType,
       });
 
       console.log(
@@ -296,7 +227,8 @@ export class AvatarService {
       const completeResponse = await this.completeUpload(
         intentResponse.key,
         optimizedImage.width,
-        optimizedImage.height
+        optimizedImage.height,
+        ownerType
       );
 
       console.log('✅ 아바타 업로드 프로세스 완료:', completeResponse);

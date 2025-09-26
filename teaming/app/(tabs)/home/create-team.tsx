@@ -12,7 +12,6 @@ import {
   ActivityIndicator,
   Modal,
 } from 'react-native';
-import { WebView } from 'react-native-webview';
 import { StatusBar } from 'expo-status-bar';
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -22,7 +21,6 @@ import {
   createTeam,
   CreateTeamRequest,
 } from '../../../src/services/teamService';
-import api from '../../../src/services/api';
 import { AvatarService } from '../../../src/services/avatarService';
 import * as FileSystem from 'expo-file-system';
 import * as Crypto from 'expo-crypto';
@@ -45,11 +43,6 @@ export default function CreateTeamScreen() {
   const [inviteCode, setInviteCode] = useState('');
   const [roomId, setRoomId] = useState<number | null>(null);
   const [isCreating, setIsCreating] = useState(false);
-
-  // 결제 웹뷰 모달 상태
-  const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [paymentHtml, setPaymentHtml] = useState('');
-  const [teamData, setTeamData] = useState<CreateTeamRequest | null>(null);
 
   // 탭 전환 감지 및 처리
   useFocusEffect(
@@ -94,152 +87,41 @@ export default function CreateTeamScreen() {
 
     console.log('📤 팀 생성 요청 데이터:', teamData);
 
-    // DEMO가 아닌 경우 결제 후 생성 로직
-    if (selectedRoom !== 'demo') {
-      console.log('💳 결제 후 생성 로직 시작');
-
-      // 선택된 방 타입의 가격 정보 가져오기
-      const selectedRoomType = roomTypes.find(
-        (room) => room.id === selectedRoom
-      );
-      if (!selectedRoomType) {
-        Alert.alert('오류', '선택된 방 타입을 찾을 수 없습니다.');
-        return;
-      }
-
-      // 결제 금액 계산: 방 가격 × (인원수 - 1)
-      const roomPrice = parseInt(selectedRoomType.price);
-      const paymentAmount = roomPrice * (teamCount - 1);
-
-      console.log(
-        `💰 결제 금액 계산: ${roomPrice}원 × ${
-          teamCount - 1
-        }명 = ${paymentAmount}원`
-      );
-
-      console.log('📤 결제 금액:', paymentAmount);
-
-      try {
-        setIsCreating(true);
-
-        // 결제 API 호출
-        console.log('🚀 결제 API 요청 - amount:', paymentAmount);
-        const response = await api.get<string>('/payment/html', {
-          params: { amount: paymentAmount },
-        });
-        let paymentHtmlResponse = response.data;
-        console.log('✅ 결제 API 응답:', paymentHtmlResponse);
-
-        // HTML에서 앱 스킴과 리턴 URL 수정
-        paymentHtmlResponse = paymentHtmlResponse
-          .replace(/appScheme:\s*['"`][^'"`]*['"`]/g, "appScheme: 'teaming://'")
-          .replace(
-            /returnUrl:\s*['"`][^'"`]*['"`]/g,
-            "returnUrl: 'https://teamingkr.duckdns.org/api/payment/request?redirect=teaming://payment-success'"
-          );
-
-        console.log('🔧 수정된 HTML:', paymentHtmlResponse);
-
-        // 팀 데이터와 결제 HTML 저장
-        setTeamData(teamData);
-        setPaymentHtml(paymentHtmlResponse);
-
-        // 결제 웹뷰 모달 표시
-        setShowPaymentModal(true);
-        setIsCreating(false);
-        return; // 결제 완료 후 팀 생성은 handlePaymentComplete에서 처리
-      } catch (error) {
-        console.error('❌ 결제 API 호출 실패:', error);
-        Alert.alert('오류', '결제 요청에 실패했습니다. 다시 시도해주세요.');
-        setIsCreating(false);
-        return;
-      }
-    } else {
-      // DEMO 타입인 경우 바로 팀 생성
-      console.log('🆓 DEMO 타입 - 바로 팀 생성');
-
-      try {
-        setIsCreating(true);
-
-        // 서버에 팀 생성 요청
-        const response = await createTeam(teamData);
-        console.log('✅ 팀 생성 성공:', response);
-
-        // 서버에서 받은 초대 코드와 roomId 저장
-        setCreatedTeamName(roomTitle);
-        setInviteCode(response.inviteCode);
-
-        if (response.roomId) {
-          setRoomId(response.roomId);
-          console.log('🏠 생성된 방 ID:', response.roomId);
-        } else {
-          console.log('⚠️ roomId가 응답에 없습니다');
-        }
-
-        // 초대 모달 표시
-        setShowInviteModal(true);
-      } catch (error) {
-        console.error('❌ 팀 생성 실패:', error);
-        Alert.alert('오류', '팀 생성에 실패했습니다. 다시 시도해주세요.');
-      } finally {
-        setIsCreating(false);
-      }
-    }
-  };
-
-  // 초대 모달 닫기만 하는 핸들러
-  const handleInviteClose = () => {
-    setShowInviteModal(false);
-  };
-
-  // 결제 웹뷰 모달 닫기 핸들러
-  const handlePaymentModalClose = () => {
-    setShowPaymentModal(false);
-    setPaymentHtml('');
-    setTeamData(null);
-  };
-
-  // 결제 완료 후 팀 생성 및 초대 모달 표시 핸들러
-  const handlePaymentComplete = async () => {
-    console.log('💳 결제 완료 - 팀 생성 시작');
-
-    if (!teamData) {
-      console.error('❌ 팀 데이터가 없습니다');
-      Alert.alert('오류', '팀 생성에 필요한 데이터가 없습니다.');
-      setShowPaymentModal(false);
-      return;
-    }
-
+    // 모든 경우에 먼저 팀 생성
     try {
       setIsCreating(true);
-      setShowPaymentModal(false);
 
-      // 서버에 팀 생성 요청
-      const response = await createTeam(teamData);
-      console.log('✅ 팀 생성 성공:', response);
+      console.log('🚀 팀 생성 시작');
+      const createdTeam = await createTeam(teamData);
+      console.log('✅ 팀 생성 완료:', createdTeam);
+
+      // 모든 경우에 초대 모달 표시 (결제는 채팅방 목록에서 처리)
+      console.log('🎉 팀 생성 완료 - 초대 모달 표시');
 
       // 서버에서 받은 초대 코드와 roomId 저장
-      setCreatedTeamName(teamData.title);
-      setInviteCode(response.inviteCode);
+      setCreatedTeamName(roomTitle);
+      setInviteCode(createdTeam.inviteCode);
 
-      if (response.roomId) {
-        setRoomId(response.roomId);
-        console.log('🏠 생성된 방 ID:', response.roomId);
+      if (createdTeam.roomId) {
+        setRoomId(createdTeam.roomId);
+        console.log('🏠 생성된 방 ID:', createdTeam.roomId);
       } else {
         console.log('⚠️ roomId가 응답에 없습니다');
       }
 
       // 초대 모달 표시
       setShowInviteModal(true);
+      setIsCreating(false);
     } catch (error) {
       console.error('❌ 팀 생성 실패:', error);
       Alert.alert('오류', '팀 생성에 실패했습니다. 다시 시도해주세요.');
-    } finally {
       setIsCreating(false);
-      // 팀 데이터 초기화
-      setTeamData(null);
-      setPaymentHtml('');
     }
+  };
+
+  // 초대 모달 닫기만 하는 핸들러
+  const handleInviteClose = () => {
+    setShowInviteModal(false);
   };
 
   // 초대 모달의 "채팅방 목록으로 이동" 눌렀을 때
@@ -283,7 +165,10 @@ export default function CreateTeamScreen() {
 
         try {
           console.log('🚀 채팅방 이미지 S3 업로드 시작');
-          const uploadResult = await AvatarService.uploadAvatar(asset.uri);
+          const uploadResult = await AvatarService.uploadAvatar(
+            asset.uri,
+            'ROOM'
+          );
 
           console.log('✅ 채팅방 이미지 업로드 성공:', uploadResult);
           setRoomImageKey(uploadResult.avatarKey);
@@ -538,69 +423,6 @@ export default function CreateTeamScreen() {
           )}
         </TouchableOpacity>
       </ScrollView>
-
-      {/* 결제 웹뷰 모달 */}
-      <Modal
-        visible={showPaymentModal}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={handlePaymentModalClose}
-      >
-        <View style={styles.paymentModalContainer}>
-          <View style={styles.paymentModalHeader}>
-            <Text style={styles.paymentModalTitle}>결제</Text>
-            <TouchableOpacity
-              style={styles.paymentModalCloseButton}
-              onPress={handlePaymentModalClose}
-            >
-              <Ionicons name="close" size={24} color="#FFFFFF" />
-            </TouchableOpacity>
-          </View>
-          <WebView
-            source={{ html: paymentHtml }}
-            style={styles.paymentWebView}
-            onNavigationStateChange={(navState) => {
-              console.log('🌐 웹뷰 네비게이션:', navState.url);
-
-              // 앱 스킴으로 리다이렉트되는 경우 감지
-              if (navState.url.startsWith('teaming://')) {
-                console.log('📱 앱 스킴 감지:', navState.url);
-
-                if (navState.url.includes('payment-success')) {
-                  console.log('✅ 결제 성공 감지');
-                  handlePaymentComplete();
-                } else if (navState.url.includes('payment-failed')) {
-                  console.log('❌ 결제 실패 감지');
-                  handlePaymentModalClose();
-                  Alert.alert(
-                    '결제 실패',
-                    '결제에 실패했습니다. 다시 시도해주세요.'
-                  );
-                }
-                return false; // 웹뷰에서 앱 스킴으로 이동하지 않도록 차단
-              }
-
-              // 일반 URL에서도 결제 완료 감지
-              if (
-                navState.url.includes('payment-success') ||
-                navState.url.includes('payment-complete') ||
-                navState.url.includes('success') ||
-                navState.url.includes('complete')
-              ) {
-                console.log('✅ 결제 완료 URL 감지:', navState.url);
-                handlePaymentComplete();
-              }
-            }}
-            onMessage={(event) => {
-              // 웹뷰에서 메시지 받기 (결제 완료 신호)
-              const message = JSON.parse(event.nativeEvent.data);
-              if (message.type === 'payment-complete') {
-                handlePaymentComplete();
-              }
-            }}
-          />
-        </View>
-      </Modal>
 
       {/* 팀 초대 모달 */}
       <TeamInviteModal
@@ -932,31 +754,5 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 12,
     lineHeight: 16,
-  },
-  // 결제 웹뷰 모달 스타일
-  paymentModalContainer: {
-    flex: 1,
-    backgroundColor: '#000000',
-  },
-  paymentModalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: '#121216',
-    borderBottomWidth: 1,
-    borderBottomColor: '#292929',
-  },
-  paymentModalTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-  },
-  paymentModalCloseButton: {
-    padding: 8,
-  },
-  paymentWebView: {
-    flex: 1,
   },
 });

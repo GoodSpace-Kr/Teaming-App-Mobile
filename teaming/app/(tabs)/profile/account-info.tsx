@@ -29,6 +29,7 @@ import {
   LoginType,
   getAccessToken,
 } from '../../../src/services/tokenManager';
+import apiClient from '../../../src/services/api';
 import { AvatarService } from '../../../src/services/avatarService';
 
 export default function AccountInfoScreen() {
@@ -66,9 +67,12 @@ export default function AccountInfoScreen() {
   const fetchAvatarUrl = async () => {
     try {
       setIsLoadingAvatar(true);
-      const avatarResponse = await AvatarService.getAvatarUrl();
-      setAvatarUrl(avatarResponse.url);
-      console.log('계정정보 화면 아바타 URL 로드:', avatarResponse.url);
+      const userResponse = await apiClient.get('/users/me');
+      setAvatarUrl(userResponse.data.avatarUrl);
+      console.log(
+        '계정정보 화면 아바타 URL 로드:',
+        userResponse.data.avatarUrl
+      );
     } catch (error) {
       console.error('아바타 URL 가져오기 실패:', error);
       // 에러가 발생해도 기본 이미지 사용
@@ -142,7 +146,8 @@ export default function AccountInfoScreen() {
         try {
           console.log('🚀 프로필 이미지 S3 업로드 시작');
           const avatarResult = await AvatarService.uploadAvatar(
-            selectedImageUri
+            selectedImageUri,
+            'USER'
           );
           console.log('✅ 프로필 이미지 S3 업로드 완료:', avatarResult);
 

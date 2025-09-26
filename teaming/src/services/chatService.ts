@@ -19,7 +19,7 @@ export interface ChatSender {
 
 export interface LastMessage {
   id: number;
-  type: 'TEXT' | 'IMAGE' | 'FILE' | 'SYSTEM';
+  type: 'TEXT' | 'IMAGE' | 'FILE';
   content: string;
   sender: ChatSender;
   createdAt: string;
@@ -33,8 +33,13 @@ export interface ChatRoom {
   title: string;
   avatarUrl: string;
   avatarVersion: number;
-  type: 'DEMO' | 'BASIC' | 'STANDARD' | 'ELITE'; // 방 타입
+  type: {
+    typeName: string;
+    price: number;
+    description: string;
+  };
   memberCount: number;
+  paymentStatus: 'NOT_PAID' | 'PAID' | 'REFUNDED';
   success: boolean;
   members: ChatMember[];
 }

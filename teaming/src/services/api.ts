@@ -279,16 +279,20 @@ export const updatePassword = async (
 };
 
 // 결제 API
-export const createPayment = async (amount: number): Promise<string> => {
+export const createPayment = async (
+  roomId: number,
+  amount: number
+): Promise<string> => {
   try {
-    console.log('🚀 결제 API 요청 - amount:', amount);
-    const response = await apiClient.get<string>('/payment/html', {
-      params: { amount },
+    const res = await apiClient.get('/payment/html', {
+      params: { amount, roomId }, // ✅ 둘 다 전달
+      headers: { Accept: 'text/html' }, // ✅ 백엔드가 html 을 반환
+      responseType: 'text', // ✅ string으로 받기
+      transformResponse: [(data) => data], // ✅ axios가 JSON 파싱 시도 못 하게
     });
-    console.log('✅ 결제 API 성공:', response.data);
-    return response.data;
-  } catch (error: any) {
-    console.error('❌ 결제 API 실패:', error);
+    return res.data as string;
+  } catch (error) {
+    console.error('❌ 결제 HTML 요청 실패:', error);
     throw error;
   }
 };

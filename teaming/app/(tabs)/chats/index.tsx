@@ -9,14 +9,18 @@ import {
   Dimensions,
   ActivityIndicator,
   Alert,
+  Modal,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { WebView } from 'react-native-webview';
+import { Linking } from 'react-native';
 import { getChatRooms, ChatRoom } from '../../../src/services/chatService';
 import { useWebSocket } from '../../../src/hooks/useWebSocket';
 import { getAccessToken } from '../../../src/services/tokenManager';
 import { subscribeRoomSock } from '../../../src/services/stompClient';
+import { createPayment } from '../../../src/services/api';
 
 const { width } = Dimensions.get('window');
 
@@ -26,6 +30,11 @@ export default function ChatsScreen() {
   const [error, setError] = useState<string | null>(null);
   const [retryKey, setRetryKey] = useState(0);
   const [jwt, setJwt] = useState<string | null>(null);
+
+  // 결제 관련 상태
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [paymentHtml, setPaymentHtml] = useState('');
+  const [selectedRoom, setSelectedRoom] = useState<ChatRoom | null>(null);
 
   // JWT 토큰 가져오기
   useEffect(() => {
@@ -65,13 +74,7 @@ export default function ChatsScreen() {
                 id: message.messageId || 0,
                 type: (message.type === 'VIDEO' || message.type === 'AUDIO'
                   ? 'FILE'
-                  : message.type === 'SYSTEM_NOTICE'
-                  ? 'SYSTEM'
-                  : message.type || 'TEXT') as
-                  | 'TEXT'
-                  | 'IMAGE'
-                  | 'FILE'
-                  | 'SYSTEM',
+                  : message.type || 'TEXT') as 'TEXT' | 'IMAGE' | 'FILE',
                 content: message.content || '',
                 sender: (message.sender || {
                   id: 0,
@@ -124,14 +127,96 @@ export default function ChatsScreen() {
     fetchChatRooms();
   }, [retryKey]);
 
+  // 결제 처리 함수
+  const handlePayment = async (room: any) => {
+    try {
+      console.log('🚀 결제 시작:', room);
+
+      // 결제 금액 계산: price * (memberCount - 1)
+      const paymentAmount = room.type.price * (room.memberCount - 1);
+
+      console.log('💰 결제 금액 계산:', {
+        price: room.type.price,
+        memberCount: room.memberCount,
+        paymentAmount: paymentAmount,
+      });
+
+      // 결제 API 호출
+      const paymentHtmlResponse = await createPayment(
+        room.roomId,
+        paymentAmount
+      );
+
+      // 결제 HTML에서 appScheme과 returnUrl 수정
+      const modifiedHtml = paymentHtmlResponse
+        .replace(/appScheme: '[^']*'/g, "appScheme: 'teaming://'")
+        .replace(
+          /returnUrl: '[^']*'/g,
+          "returnUrl: 'https://teamingkr.duckdns.org/api/payment/request'"
+        );
+
+      setSelectedRoom(room);
+      setPaymentHtml(modifiedHtml);
+      setShowPaymentModal(true);
+    } catch (error) {
+      console.error('❌ 결제 API 실패:', error);
+      Alert.alert('결제 실패', '결제 요청 중 오류가 발생했습니다.');
+    }
+  };
+
+  // 결제 모달 닫기
+  const handlePaymentModalClose = () => {
+    setShowPaymentModal(false);
+    setPaymentHtml('');
+    setSelectedRoom(null);
+  };
+
+  // 결제 완료 처리
+  const handlePaymentComplete = () => {
+    console.log('✅ 결제 완료');
+    handlePaymentModalClose();
+
+    // 채팅방 목록 새로고침
+    fetchChatRooms();
+
+    // 결제 완료된 방으로 자동 이동
+    if (selectedRoom) {
+      const membersParam = encodeURIComponent(
+        JSON.stringify(selectedRoom.members)
+      );
+      const titleParam = encodeURIComponent(selectedRoom.title);
+      router.push(
+        `/(tabs)/chats/chat-room/${selectedRoom.roomId}?role=${selectedRoom.role}&success=${selectedRoom.success}&members=${membersParam}&title=${titleParam}`
+      );
+    }
+  };
+
   const handleEnterChatRoom = (
     roomId: number,
     role: 'LEADER' | 'MEMBER',
     success: boolean,
     members: any[],
-    title: string
+    title: string,
+    paymentStatus: string,
+    roomType: any
   ) => {
-    // members 정보를 JSON 문자열로 인코딩하여 전달
+    // 결제가 필요한 경우 결제 웹뷰 표시
+    if (paymentStatus === 'NOT_PAID') {
+      const room = {
+        roomId,
+        role,
+        success,
+        members,
+        title,
+        paymentStatus,
+        type: roomType,
+        memberCount: members.length,
+      };
+      handlePayment(room);
+      return;
+    }
+
+    // 결제 완료된 경우 채팅방으로 이동
     const membersParam = encodeURIComponent(JSON.stringify(members));
     const titleParam = encodeURIComponent(title);
     router.push(
@@ -205,90 +290,227 @@ export default function ChatsScreen() {
             });
 
             return (
-              <TouchableOpacity
-                key={room.roomId}
-                style={styles.chatRoomCard}
-                onPress={() =>
-                  handleEnterChatRoom(
-                    room.roomId,
-                    room.role,
-                    room.success,
-                    room.members,
-                    room.title
-                  )
-                }
-              >
-                <View style={styles.chatRoomContent}>
-                  {/* 채팅방 아이콘 */}
-                  <View style={styles.roomIconContainer}>
-                    {room.avatarUrl ? (
-                      <Image
-                        source={{ uri: room.avatarUrl }}
-                        style={styles.roomIcon}
-                        defaultSource={require('../../../assets/images/(beforeLogin)/bluePeople.png')}
-                        onError={() => {
-                          console.log(
-                            '채팅방 아바타 이미지 로드 실패, 기본 아이콘으로 대체'
-                          );
-                        }}
-                      />
-                    ) : (
-                      <View style={styles.defaultRoomIcon}>
-                        <Ionicons name="people" size={20} color="#4A90E2" />
-                      </View>
-                    )}
-                    {room.unreadCount > 0 && (
-                      <View style={styles.unreadBadge}>
-                        <Text style={styles.unreadText}>
-                          {room.unreadCount > 99 ? '99+' : room.unreadCount}
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-
-                  <View style={styles.roomInfo}>
-                    <View style={styles.roomTitleRow}>
-                      <View style={styles.titleContainer}>
-                        <Text style={styles.roomTitle} numberOfLines={1}>
-                          {room.title}
-                        </Text>
-                        {room.success && (
-                          <View style={styles.completionBadge}>
-                            <Ionicons
-                              name="checkmark"
-                              size={14}
-                              color="#FFFFFF"
-                            />
-                          </View>
-                        )}
-                      </View>
+              <View key={room.roomId} style={styles.chatRoomCard}>
+                <TouchableOpacity
+                  style={styles.chatRoomContent}
+                  onPress={() =>
+                    handleEnterChatRoom(
+                      room.roomId,
+                      room.role,
+                      room.success,
+                      room.members,
+                      room.title,
+                      room.paymentStatus,
+                      room.type
+                    )
+                  }
+                >
+                  <View style={styles.chatRoomContent}>
+                    {/* 채팅방 아이콘 */}
+                    <View style={styles.roomIconContainer}>
+                      {room.avatarUrl ? (
+                        <Image
+                          source={{ uri: room.avatarUrl }}
+                          style={styles.roomIcon}
+                          defaultSource={require('../../../assets/images/(beforeLogin)/bluePeople.png')}
+                          onError={() => {
+                            console.log(
+                              '채팅방 아바타 이미지 로드 실패, 기본 아이콘으로 대체'
+                            );
+                          }}
+                        />
+                      ) : (
+                        <View style={styles.defaultRoomIcon}>
+                          <Ionicons name="people" size={20} color="#4A90E2" />
+                        </View>
+                      )}
+                      {room.unreadCount > 0 && (
+                        <View style={styles.unreadBadge}>
+                          <Text style={styles.unreadText}>
+                            {room.unreadCount > 99 ? '99+' : room.unreadCount}
+                          </Text>
+                        </View>
+                      )}
                     </View>
 
-                    {room.lastMessage ? (
-                      <Text style={styles.lastMessage} numberOfLines={1}>
-                        {room.lastMessage.sender.name}:{' '}
-                        {room.lastMessage.content}
-                      </Text>
-                    ) : (
-                      <Text style={styles.lastMessage} numberOfLines={1}>
-                        메시지가 없습니다
-                      </Text>
-                    )}
-                  </View>
+                    <View style={styles.roomInfo}>
+                      <View style={styles.roomTitleRow}>
+                        <View style={styles.titleContainer}>
+                          <Text style={styles.roomTitle} numberOfLines={1}>
+                            {room.title}
+                          </Text>
+                          {room.success && (
+                            <View style={styles.completionBadge}>
+                              <Ionicons
+                                name="checkmark"
+                                size={14}
+                                color="#FFFFFF"
+                              />
+                            </View>
+                          )}
+                        </View>
+                      </View>
 
-                  <View style={styles.timeContainer}>
-                    {room.lastMessage && (
-                      <Text style={styles.lastMessageTime}>
-                        {formatTime(room.lastMessage.createdAt)}
-                      </Text>
-                    )}
+                      {room.lastMessage ? (
+                        <Text style={styles.lastMessage} numberOfLines={1}>
+                          {room.lastMessage.sender.name}:{' '}
+                          {room.lastMessage.content}
+                        </Text>
+                      ) : (
+                        <Text style={styles.lastMessage} numberOfLines={1}>
+                          메시지가 없습니다
+                        </Text>
+                      )}
+                    </View>
+
+                    <View style={styles.timeContainer}>
+                      {room.lastMessage && (
+                        <Text style={styles.lastMessageTime}>
+                          {formatTime(room.lastMessage.createdAt)}
+                        </Text>
+                      )}
+                    </View>
                   </View>
-                </View>
-              </TouchableOpacity>
+                </TouchableOpacity>
+
+                {/* 결제 상태 표시 - 결제가 필요한 경우에만 카드 모양 표시 */}
+                {room.paymentStatus === 'NOT_PAID' && (
+                  <View style={styles.paymentStatusCard}>
+                    <Ionicons name="card" size={20} color="#FFD700" />
+                  </View>
+                )}
+              </View>
             );
           })
         )}
       </ScrollView>
+
+      {/* 결제 모달 */}
+      <Modal
+        visible={showPaymentModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={handlePaymentModalClose}
+      >
+        <View style={styles.paymentModalContainer}>
+          <View style={styles.paymentModalHeader}>
+            <Text style={styles.paymentModalTitle}>결제하기</Text>
+            <TouchableOpacity
+              style={styles.paymentModalCloseButton}
+              onPress={handlePaymentModalClose}
+            >
+              <Ionicons name="close" size={24} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
+
+          {paymentHtml && (
+            <WebView
+              source={{
+                html: paymentHtml,
+                baseUrl: 'https://teamingkr.duckdns.org', // 상대경로 리소스 대비
+              }}
+              style={styles.paymentWebView}
+              // ✅ 결제에 필요한 권한/설정
+              javaScriptEnabled
+              domStorageEnabled
+              mixedContentMode="always"
+              thirdPartyCookiesEnabled
+              javaScriptCanOpenWindowsAutomatically
+              setSupportMultipleWindows={false}
+              originWhitelist={['*']}
+              // ✅ 결제 JS가 로드되기 전에 serverAuth 주입
+              injectedJavaScriptBeforeContentLoaded={`
+                (function() {
+                  // ✅ 결제 스크립트가 참조하는 인증 컨텍스트
+                  window.serverAuth = { accessToken: ${JSON.stringify(
+                    jwt || ''
+                  )} };
+
+                  // 혹시 HTML 치환이 누락되도 안전하게 기본값 셋
+                  window.__APP_SCHEME__ = 'teaming://';
+                  window.__RETURN_URL__ = 'https://teamingkr.duckdns.org/api/payment/request';
+
+                  // 콘솔 포워딩 (디버깅)
+                  try {
+                    ['log','warn','error'].forEach(function(k){
+                      const orig = console[k].bind(console);
+                      console[k] = function(){
+                        try { window.ReactNativeWebView.postMessage(JSON.stringify({
+                          type:'console-log',
+                          message: Array.from(arguments).map(String).join(' ')
+                        })); } catch(e){}
+                        return orig.apply(console, arguments);
+                      }
+                    })
+                  } catch(e){}
+                })();
+                true; // iOS 필요
+              `}
+              // (보강) 로드 후도 한 번 더 기본값 주입
+              injectedJavaScript={`
+                try {
+                  if (!window.NICEPAY_APP_SCHEME) window.NICEPAY_APP_SCHEME = 'teaming://';
+                  if (!window.NICEPAY_RETURN_URL) window.NICEPAY_RETURN_URL = 'https://teamingkr.duckdns.org/api/payment/request';
+                } catch(e){}
+                true;
+              `}
+              onShouldStartLoadWithRequest={(req) => {
+                const url = req.url || '';
+                if (/^(teaming|intent|market|tel|mailto):/i.test(url)) {
+                  try {
+                    Linking.openURL(url);
+                  } catch (e) {}
+                  return false; // WebView 내 네비게이션 중단하고 앱으로 넘김
+                }
+                return true;
+              }}
+              onNavigationStateChange={(nav) => {
+                console.log(
+                  '🌐 웹뷰 네비게이션:',
+                  nav.url,
+                  'loading=',
+                  nav.loading
+                );
+              }}
+              onLoadEnd={({ nativeEvent }) => {
+                console.log('✅ 페이지 로드 완료:', nativeEvent.url);
+                if (nativeEvent.url.includes('/api/payment/request')) {
+                  handlePaymentComplete();
+                }
+              }}
+              onError={({ nativeEvent }) => {
+                console.log('❌ 웹뷰 에러:', nativeEvent);
+              }}
+              onHttpError={({ nativeEvent }) => {
+                console.log(
+                  '🚨 HTTP 에러:',
+                  nativeEvent.statusCode,
+                  nativeEvent.url
+                );
+                if (
+                  nativeEvent.statusCode < 200 ||
+                  nativeEvent.statusCode >= 300
+                ) {
+                  handlePaymentModalClose();
+                  Alert.alert(
+                    '결제 실패',
+                    '결제에 실패했습니다. 다시 시도해주세요.'
+                  );
+                }
+              }}
+              onMessage={(event) => {
+                try {
+                  const msg = JSON.parse(event.nativeEvent.data);
+                  console.log('📨 웹뷰 메시지 수신:', msg);
+                  if (msg.type === 'payment-complete') handlePaymentComplete();
+                } catch {
+                  console.log('📨 웹뷰 raw 메시지:', event.nativeEvent.data);
+                }
+              }}
+            />
+          )}
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -469,5 +691,45 @@ const styles = StyleSheet.create({
   timeContainer: {
     alignItems: 'flex-end',
     justifyContent: 'center',
+  },
+
+  // 결제 상태 카드
+  paymentStatusCard: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1,
+  },
+
+  // 결제 모달
+  paymentModalContainer: {
+    flex: 1,
+    backgroundColor: '#000000',
+  },
+  paymentModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 60,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#292929',
+  },
+  paymentModalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+  },
+  paymentModalCloseButton: {
+    padding: 8,
+  },
+  paymentWebView: {
+    flex: 1,
   },
 });
