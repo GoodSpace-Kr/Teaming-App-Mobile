@@ -15,6 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import CompleteTeamModal from './complete-team-modal';
 import TeamCompletionSuccessModal from './team-completion-success-modal';
 import * as apiService from '@/src/services/api';
+import { getUserInfo } from '@/src/services/api';
 
 const { width } = Dimensions.get('window');
 
@@ -26,44 +27,57 @@ interface Participant {
 }
 
 export default function ChatMenuScreen() {
-  const { roomId, isLeader, isCompleted } = useLocalSearchParams();
+  const { roomId, isLeader, isCompleted, members, title } =
+    useLocalSearchParams();
   const [showLeaveModal, setShowLeaveModal] = useState(false);
   const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [isCompleting, setIsCompleting] = useState(false);
+  const [currentUserName, setCurrentUserName] = useState<string>('');
 
   // 팀장 여부 확인 (실제로는 API에서 가져올 데이터)
   const isTeamLeader = isLeader === 'true';
   // 팀플 완료 상태 확인
   const isTeamCompleted = isCompleted === 'true';
 
-  // 참가자 목록 (실제로는 API에서 가져올 데이터)
-  const participants: Participant[] = [
-    {
-      id: 1,
-      name: '권민석',
-      avatar: require('../../../assets/images/(chattingRoom)/me.png'),
-      isMe: true,
-    },
-    {
-      id: 2,
-      name: '팀장 최순조',
-      avatar: require('../../../assets/images/(chattingRoom)/choi.png'),
-      isMe: false,
-    },
-    {
-      id: 3,
-      name: '정치학존잘남',
-      avatar: require('../../../assets/images/(chattingRoom)/politicMan.png'),
-      isMe: false,
-    },
-    {
-      id: 4,
-      name: '팀플하기싫다',
-      avatar: require('../../../assets/images/(chattingRoom)/noTeample.png'),
-      isMe: false,
-    },
-  ];
+  // 현재 사용자 정보 로드
+  React.useEffect(() => {
+    const loadCurrentUserInfo = async () => {
+      try {
+        const userInfo = await getUserInfo();
+        setCurrentUserName(userInfo.name);
+        console.log('👤 chat-menu 현재 사용자 정보:', userInfo);
+      } catch (error) {
+        console.error('❌ 현재 사용자 정보 로드 실패:', error);
+      }
+    };
+
+    loadCurrentUserInfo();
+  }, []);
+
+  // members 정보를 파싱하여 참가자 목록 생성
+  const participants: Participant[] = React.useMemo(() => {
+    if (!members) {
+      // members 정보가 없으면 빈 목록 반환
+      return [];
+    }
+
+    try {
+      const membersData = JSON.parse(decodeURIComponent(members as string));
+
+      return membersData.map((member: any, index: number) => ({
+        id: member.memberId,
+        name:
+          member.roomRole === 'LEADER' ? `${member.name}(팀장)` : member.name,
+        avatar: member.avatarUrl ? { uri: member.avatarUrl } : null,
+        isMe: member.name === currentUserName,
+      }));
+    } catch (error) {
+      console.error('❌ members 파싱 실패:', error);
+      // 파싱 실패 시 빈 목록 반환
+      return [];
+    }
+  }, [members, currentUserName]);
 
   const handleBackPress = () => {
     router.back();
@@ -74,17 +88,15 @@ export default function ChatMenuScreen() {
   };
 
   const handleCreateTask = () => {
-    router.push(`/(tabs)/chats/create-task?roomId=${roomId}`);
+    // members 정보를 그대로 전달
+    const membersParam = members ? `&members=${members}` : '';
+    router.push(`/(tabs)/chats/create-task?roomId=${roomId}${membersParam}`);
   };
 
   const handleViewTasks = () => {
     // 과제 목록 화면으로 이동
-    router.push(`/(tabs)/chats/task-list?roomId=${roomId}`);
-  };
-
-  const handleSubmitTasks = () => {
-    // 과제 제출 화면으로 이동
-    router.push(`/(tabs)/chats/submit-task?roomId=${roomId}`);
+    const isLeaderParam = isLeader ? `&isLeader=${isLeader}` : '';
+    router.push(`/(tabs)/chats/task-list?roomId=${roomId}${isLeaderParam}`);
   };
 
   const handleLeaveRoom = () => {
@@ -198,7 +210,9 @@ export default function ChatMenuScreen() {
         <View style={styles.roomIcon}>
           <Ionicons name="people" size={32} color="#FFFFFF" />
         </View>
-        <Text style={styles.headerTitle}>정치학 발표</Text>
+        <Text style={styles.headerTitle}>
+          {title ? decodeURIComponent(title as string) : '정치학 발표'}
+        </Text>
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
@@ -224,29 +238,13 @@ export default function ChatMenuScreen() {
               <Ionicons name="chevron-forward" size={20} color="#666666" />
             </TouchableOpacity>
           ) : (
-            <>
-              <TouchableOpacity
-                style={styles.menuItem}
-                onPress={handleViewTasks}
-              >
-                <View style={styles.menuIcon}>
-                  <Ionicons name="document-text" size={24} color="#007AFF" />
-                </View>
-                <Text style={styles.menuText}>과제방</Text>
-                <Ionicons name="chevron-forward" size={20} color="#666666" />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.menuItem}
-                onPress={handleSubmitTasks}
-              >
-                <View style={styles.menuIcon}>
-                  <Ionicons name="send" size={24} color="#4CAF50" />
-                </View>
-                <Text style={styles.menuText}>과제 제출</Text>
-                <Ionicons name="chevron-forward" size={20} color="#666666" />
-              </TouchableOpacity>
-            </>
+            <TouchableOpacity style={styles.menuItem} onPress={handleViewTasks}>
+              <View style={styles.menuIcon}>
+                <Ionicons name="document-text" size={24} color="#007AFF" />
+              </View>
+              <Text style={styles.menuText}>과제방</Text>
+              <Ionicons name="chevron-forward" size={20} color="#666666" />
+            </TouchableOpacity>
           )}
 
           {isTeamLeader && (
@@ -265,22 +263,30 @@ export default function ChatMenuScreen() {
           <Text style={styles.sectionTitle}>
             대화상대 {participants.length}
           </Text>
-          {participants.map((participant) => (
-            <View key={participant.id} style={styles.participantItem}>
-              <Image
-                source={participant.avatar}
-                style={styles.participantAvatar}
-              />
-              <View style={styles.nameContainer}>
-                {participant.isMe && (
-                  <View style={styles.meBadge}>
-                    <Text style={styles.meText}>나</Text>
-                  </View>
-                )}
-                <Text style={styles.participantName}>{participant.name}</Text>
-              </View>
+          {participants.length === 0 ? (
+            <View style={styles.emptyParticipants}>
+              <Text style={styles.emptyParticipantsText}>
+                참가자 정보를 불러올 수 없습니다.
+              </Text>
             </View>
-          ))}
+          ) : (
+            participants.map((participant) => (
+              <View key={participant.id} style={styles.participantItem}>
+                <Image
+                  source={participant.avatar}
+                  style={styles.participantAvatar}
+                />
+                <View style={styles.nameContainer}>
+                  {participant.isMe && (
+                    <View style={styles.meBadge}>
+                      <Text style={styles.meText}>나</Text>
+                    </View>
+                  )}
+                  <Text style={styles.participantName}>{participant.name}</Text>
+                </View>
+              </View>
+            ))
+          )}
         </View>
 
         {/* 팀플 완료 또는 나가기 */}
@@ -576,5 +582,14 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#FFFFFF',
     fontWeight: '500',
+  },
+  emptyParticipants: {
+    padding: 16,
+    alignItems: 'center',
+  },
+  emptyParticipantsText: {
+    fontSize: 14,
+    color: '#666666',
+    textAlign: 'center',
   },
 });

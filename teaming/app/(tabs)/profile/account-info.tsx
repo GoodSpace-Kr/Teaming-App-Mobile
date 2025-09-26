@@ -41,6 +41,8 @@ export default function AccountInfoScreen() {
   const [profileImage, setProfileImage] = useState<string | any>(
     require('../../../assets/images/(chattingRoom)/me.png')
   );
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [isLoadingAvatar, setIsLoadingAvatar] = useState(false);
 
   // 이메일 변경 관련 상태
   const [newEmail, setNewEmail] = useState('');
@@ -59,6 +61,21 @@ export default function AccountInfoScreen() {
 
   // 로그인 타입 상태
   const [loginType, setLoginType] = useState<LoginType | null>(null);
+
+  // 아바타 URL 가져오기
+  const fetchAvatarUrl = async () => {
+    try {
+      setIsLoadingAvatar(true);
+      const avatarResponse = await AvatarService.getAvatarUrl();
+      setAvatarUrl(avatarResponse.url);
+      console.log('계정정보 화면 아바타 URL 로드:', avatarResponse.url);
+    } catch (error) {
+      console.error('아바타 URL 가져오기 실패:', error);
+      // 에러가 발생해도 기본 이미지 사용
+    } finally {
+      setIsLoadingAvatar(false);
+    }
+  };
 
   // 화면 진입 시 사용자 정보 가져오기
   useEffect(() => {
@@ -88,8 +105,9 @@ export default function AccountInfoScreen() {
         setNickname(userInfo.name);
         setLoginType(currentLoginType);
 
-        // TODO: avatarKey와 avatarVersion을 사용하여 프로필 이미지 설정
-        // 현재는 기본 이미지 사용
+        // 아바타 URL 가져오기
+        await fetchAvatarUrl();
+
         console.log('사용자 정보:', userInfo);
         console.log('로그인 타입:', currentLoginType);
       } catch (error: any) {
@@ -130,6 +148,10 @@ export default function AccountInfoScreen() {
 
           // 업로드 성공 시 로컬 상태 업데이트
           setProfileImage(selectedImageUri);
+
+          // 아바타 URL 다시 가져오기
+          await fetchAvatarUrl();
+
           Alert.alert('성공', '프로필 이미지가 업데이트되었습니다.');
         } catch (uploadError) {
           console.error('❌ 프로필 이미지 업로드 실패:', uploadError);
@@ -325,14 +347,26 @@ export default function AccountInfoScreen() {
             style={styles.profileImageContainer}
             onPress={handleChangeProfileImage}
           >
-            <Image
-              source={
-                typeof profileImage === 'string'
-                  ? { uri: profileImage }
-                  : profileImage
-              }
-              style={styles.profileImage}
-            />
+            {isLoadingAvatar ? (
+              <View style={styles.profileImageLoading}>
+                <ActivityIndicator size="large" color="#4A90E2" />
+              </View>
+            ) : (
+              <Image
+                source={
+                  avatarUrl
+                    ? { uri: avatarUrl }
+                    : typeof profileImage === 'string'
+                    ? { uri: profileImage }
+                    : profileImage
+                }
+                style={styles.profileImage}
+                onError={() => {
+                  console.log('아바타 이미지 로드 실패, 기본 이미지 사용');
+                  setAvatarUrl(null);
+                }}
+              />
+            )}
             <View style={styles.cameraButton}>
               <Ionicons name="camera" size={16} color="#000000" />
             </View>
@@ -475,14 +509,26 @@ export default function AccountInfoScreen() {
                 style={styles.profileImageContainer}
                 onPress={handleChangeProfileImage}
               >
-                <Image
-                  source={
-                    typeof profileImage === 'string'
-                      ? { uri: profileImage }
-                      : profileImage
-                  }
-                  style={styles.profileImage}
-                />
+                {isLoadingAvatar ? (
+                  <View style={styles.profileImageLoading}>
+                    <ActivityIndicator size="large" color="#4A90E2" />
+                  </View>
+                ) : (
+                  <Image
+                    source={
+                      avatarUrl
+                        ? { uri: avatarUrl }
+                        : typeof profileImage === 'string'
+                        ? { uri: profileImage }
+                        : profileImage
+                    }
+                    style={styles.profileImage}
+                    onError={() => {
+                      console.log('아바타 이미지 로드 실패, 기본 이미지 사용');
+                      setAvatarUrl(null);
+                    }}
+                  />
+                )}
                 <View style={styles.cameraButton}>
                   <Ionicons name="camera" size={16} color="#000000" />
                 </View>
@@ -970,5 +1016,13 @@ const styles = StyleSheet.create({
     color: '#999999',
     marginTop: 8,
     lineHeight: 16,
+  },
+  profileImageLoading: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: '#1A1A1A',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

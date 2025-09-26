@@ -11,18 +11,24 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { TaskService } from '@/src/services/taskService';
 import { Task, TaskWithMembers, TaskMember } from '@/src/types/task';
+import { getUserInfo } from '@/src/services/api';
+import { getAccessToken } from '@/src/services/tokenManager';
 
 const { width } = Dimensions.get('window');
 
 export default function TaskListScreen() {
-  const { roomId } = useLocalSearchParams<{ roomId: string }>();
+  const { roomId, isLeader } = useLocalSearchParams<{
+    roomId: string;
+    isLeader?: string;
+  }>();
   const [tasks, setTasks] = useState<TaskWithMembers[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isLeader, setIsLeader] = useState(true); // TODO: 실제 사용자 권한에서 가져오기
+  const [currentUserId, setCurrentUserId] = useState<number | null>(null);
+  const isTeamLeader = isLeader === 'true';
 
   // 멤버 정보 매핑 (실제로는 API에서 가져와야 함)
   const memberMap = new Map<number, TaskMember>([
@@ -32,15 +38,63 @@ export default function TaskListScreen() {
     [4, { id: 4, name: '최순조(팀장)', hasSubmitted: false }],
   ]);
 
-  // 과제 목록 로드
+  // 현재 사용자 정보 로드
   useEffect(() => {
-    loadTasks();
-  }, [roomId]);
+    loadCurrentUserInfo();
+  }, []);
+
+  // 과제 목록 로드 (화면 포커스 시마다 새로고침)
+  useFocusEffect(
+    React.useCallback(() => {
+      if (currentUserId !== null) {
+        loadTasks();
+      }
+    }, [currentUserId])
+  );
+
+  // JWT 토큰에서 사용자 ID 추출하는 함수
+  const getUserIdFromToken = (token: string): number | null => {
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      return payload.sub ? parseInt(payload.sub) : null;
+    } catch (error) {
+      console.error('토큰에서 사용자 ID 추출 실패:', error);
+      return null;
+    }
+  };
+
+  const loadCurrentUserInfo = async () => {
+    try {
+      // JWT 토큰에서 사용자 ID 추출
+      const token = await getAccessToken();
+      if (token) {
+        const userId = getUserIdFromToken(token);
+        setCurrentUserId(userId);
+        console.log('👤 현재 사용자 ID:', userId);
+      } else {
+        console.error('❌ JWT 토큰을 찾을 수 없습니다');
+        // 기본값으로 1 설정 (권민석)
+        setCurrentUserId(1);
+      }
+    } catch (error) {
+      console.error('❌ 현재 사용자 정보 로드 실패:', error);
+      // 기본값으로 1 설정 (권민석)
+      setCurrentUserId(1);
+    }
+  };
 
   const loadTasks = async () => {
     try {
       setIsLoading(true);
       console.log('🚀 과제 목록 로드:', { roomId });
+
+      // 토큰 상태 확인
+      const token = await getAccessToken();
+      console.log('🔑 현재 토큰 상태:', token ? '토큰 있음' : '토큰 없음');
+      if (token) {
+        console.log('🔑 토큰 길이:', token.length);
+        console.log('🔑 토큰 앞 20자:', token.substring(0, 20) + '...');
+      }
 
       const tasks = await TaskService.getTasks(Number(roomId));
 
@@ -91,7 +145,8 @@ export default function TaskListScreen() {
   };
 
   const handleTaskPress = (taskId: number) => {
-    router.push(`/(tabs)/chats/view-task?id=${taskId}`);
+    // 모든 과제는 과제 확인 뷰로 이동 (제출 기능 포함)
+    router.push(`/(tabs)/chats/view-task?id=${taskId}&roomId=${roomId}`);
   };
 
   const handleDeleteTask = async (task: TaskWithMembers) => {
@@ -109,7 +164,7 @@ export default function TaskListScreen() {
           onPress: async () => {
             try {
               console.log('🗑️ 과제 삭제:', task.assignmentId, task.title);
-              await TaskService.deleteTask(task.assignmentId);
+              await TaskService.deleteTask(Number(roomId), task.assignmentId);
 
               // 목록에서 제거
               setTasks((prev) =>
@@ -141,8 +196,25 @@ export default function TaskListScreen() {
     return TaskService.formatDateFromISO(dateString);
   };
 
+  // 본인이 할당된 과제인지 확인
+  const isAssignedToMe = (task: TaskWithMembers) => {
+    if (!currentUserId) return false;
+    return task.assignedMemberIds.includes(currentUserId);
+  };
+
+  // 본인의 제출 상태 확인
+  const getMySubmissionStatus = (task: TaskWithMembers) => {
+    if (!currentUserId) return null;
+    const myMember = task.assignedMembers.find(
+      (member) => member.id === currentUserId
+    );
+    return myMember ? myMember.hasSubmitted : false;
+  };
+
   const renderTaskItem = (task: TaskWithMembers) => {
     const status = getTaskStatus(task);
+    const isMyTask = isAssignedToMe(task);
+    const mySubmissionStatus = getMySubmissionStatus(task);
 
     return (
       <TouchableOpacity
@@ -154,15 +226,32 @@ export default function TaskListScreen() {
           <Text style={styles.taskTitle} numberOfLines={1}>
             {task.title}
           </Text>
-          {/* 팀장만 삭제 버튼 표시 */}
-          {isLeader && (
-            <TouchableOpacity
-              style={styles.deleteButton}
-              onPress={() => handleDeleteTask(task)}
-            >
-              <Ionicons name="trash-outline" size={16} color="#FF3B30" />
-            </TouchableOpacity>
-          )}
+          <View style={styles.taskHeaderRight}>
+            {/* 본인에게 할당된 과제의 제출 상태 표시 */}
+            {isMyTask && (
+              <View
+                style={[
+                  styles.submissionStatusBadge,
+                  {
+                    backgroundColor: mySubmissionStatus ? '#4CAF50' : '#FF9500',
+                  },
+                ]}
+              >
+                <Text style={styles.submissionStatusText}>
+                  {mySubmissionStatus ? '제출 완료' : '제출 필요'}
+                </Text>
+              </View>
+            )}
+            {/* 팀장만 삭제 버튼 표시 */}
+            {isTeamLeader && (
+              <TouchableOpacity
+                style={styles.deleteButton}
+                onPress={() => handleDeleteTask(task)}
+              >
+                <Ionicons name="trash-outline" size={16} color="#FF3B30" />
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
 
         <Text style={styles.taskDescription} numberOfLines={2}>
@@ -324,6 +413,22 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     flex: 1,
     marginRight: 12,
+  },
+  taskHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  submissionStatusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    backgroundColor: '#FF9500',
+  },
+  submissionStatusText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
   deleteButton: {
     padding: 4,

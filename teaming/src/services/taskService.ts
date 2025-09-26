@@ -32,7 +32,7 @@ export class TaskService {
       console.log('🚀 과제 생성 API 요청:', { roomId, taskData });
 
       const response = await apiClient.post<CreateTaskResponse>(
-        `/rooms/${roomId}/assignment`,
+        `/rooms/${roomId}/assignments`,
         taskData
       );
 
@@ -54,13 +54,16 @@ export class TaskService {
       console.log('🚀 과제 목록 조회 API 요청:', { roomId });
 
       const response = await apiClient.get<Task[]>(
-        `/rooms/${roomId}/assignment`
+        `/rooms/${roomId}/assignments`
       );
 
       console.log('✅ 과제 목록 조회 성공:', response.data);
       return response.data;
     } catch (error: any) {
       console.error('❌ 과제 목록 조회 실패:', error);
+      console.error('❌ API 에러:', error.response?.data);
+      console.error('❌ 에러 상태:', error.response?.status);
+      console.error('❌ 에러 헤더:', error.response?.headers);
       throw error;
     }
   }
@@ -82,25 +85,31 @@ export class TaskService {
       return response.data;
     } catch (error: any) {
       console.error('❌ 과제 상세 조회 실패:', error);
+      console.error('❌ API 에러:', error.response?.data);
+      console.error('❌ 에러 상태:', error.response?.status);
+      console.error('❌ 에러 헤더:', error.response?.headers);
       throw error;
     }
   }
 
   /**
    * 과제 제출
+   * @param roomId 채팅방 ID
    * @param submissionData 제출 데이터
    * @returns 제출 결과
    */
   static async submitTask(
+    roomId: number,
     submissionData: TaskSubmissionRequest
   ): Promise<TaskSubmissionResponse> {
     try {
-      console.log('🚀 과제 제출 API 요청:', submissionData);
+      console.log('🚀 과제 제출 API 요청:', { roomId, submissionData });
 
       const response = await apiClient.post<TaskSubmissionResponse>(
-        `/assignments/${submissionData.taskId}/submit`,
+        `/rooms/${roomId}/assignments/submit`,
         {
-          content: submissionData.content,
+          assignmentId: submissionData.taskId,
+          description: submissionData.content,
           fileIds: submissionData.fileIds || [],
         }
       );
@@ -141,15 +150,19 @@ export class TaskService {
 
   /**
    * 과제 삭제 (팀장만 가능)
-   * @param taskId 과제 ID
+   * @param roomId 채팅방 ID
+   * @param assignmentId 과제 ID
    * @returns 삭제 결과
    */
-  static async deleteTask(taskId: number): Promise<{ message: string }> {
+  static async deleteTask(
+    roomId: number,
+    assignmentId: number
+  ): Promise<{ message: string }> {
     try {
-      console.log('🚀 과제 삭제 API 요청:', { taskId });
+      console.log('🚀 과제 삭제 API 요청:', { roomId, assignmentId });
 
       const response = await apiClient.delete<{ message: string }>(
-        `/assignments/${taskId}`
+        `/rooms/${roomId}/assignments/${assignmentId}`
       );
 
       console.log('✅ 과제 삭제 성공:', response.data);

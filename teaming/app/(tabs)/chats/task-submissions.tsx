@@ -8,82 +8,99 @@ import {
   Image,
   Dimensions,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { TaskService } from '@/src/services/taskService';
+import { TaskWithMembers, TaskMember } from '@/src/types/task';
+import { getAccessToken } from '@/src/services/tokenManager';
 
 const { width } = Dimensions.get('window');
 
-interface Task {
-  id: number;
-  title: string;
-  description: string;
-  deadline: string;
-  assignedMembers: AssignedMember[];
-  createdAt: string;
-}
+// TaskWithMembers 타입을 사용하므로 별도 인터페이스 제거
 
-interface AssignedMember {
-  id: number;
-  name: string;
-  avatar: any;
-  hasSubmitted: boolean;
-  submittedAt?: string;
-  submissionText?: string;
-  submittedFiles?: SubmittedFile[];
-}
-
-interface SubmittedFile {
-  id: string;
-  name: string;
-  size: number;
-  type: string;
-}
+// TaskMember 타입을 사용하므로 별도 인터페이스 제거
 
 export default function TaskSubmissionsScreen() {
-  // 목데이터 - 실제 API 연동 시 대체
-  const [tasks] = useState<Task[]>([
-    {
-      id: 1,
-      title: '자료조사 2명 과제부여',
-      description:
-        '자료조사를 하겠다고 한 2명에게 과제를 부여합니다.\n제한시간에 맞춰서 과제 제출해주시면 감사하겠습니다.',
-      deadline: '2025년 09월 07일 07:00',
-      createdAt: '2025년 09월 05일 14:30',
-      assignedMembers: [
-        {
-          id: 1,
-          name: '권민석',
-          avatar: require('../../../assets/images/(chattingRoom)/me.png'),
-          hasSubmitted: true,
-          submittedAt: '2025년 09월 06일 16:45',
-          submissionText:
-            '정치학 관련 자료를 수집했습니다. 주요 내용은 다음과 같습니다...',
-          submittedFiles: [
-            {
-              id: '1',
-              name: '정치학_자료조사.pdf',
-              size: 2048576,
-              type: 'application/pdf',
-            },
-            {
-              id: '2',
-              name: '참고문헌.docx',
-              size: 1024000,
-              type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-            },
-          ],
-        },
-        {
-          id: 2,
-          name: '정치학존잘남',
-          avatar: require('../../../assets/images/(chattingRoom)/politicMan.png'),
-          hasSubmitted: false,
-        },
-      ],
-    },
+  const { roomId } = useLocalSearchParams<{ roomId?: string }>();
+  const [tasks, setTasks] = useState<TaskWithMembers[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [currentUserId, setCurrentUserId] = useState<number | null>(null);
+
+  // 멤버 정보 매핑 (실제로는 API에서 가져와야 함)
+  const memberMap = new Map<number, TaskMember>([
+    [1, { id: 1, name: '권민석', hasSubmitted: false }],
+    [2, { id: 2, name: '정치학존잘남', hasSubmitted: false }],
+    [3, { id: 3, name: '팀플하기싫다', hasSubmitted: false }],
+    [4, { id: 4, name: '최순조(팀장)', hasSubmitted: false }],
   ]);
+
+  // JWT 토큰에서 사용자 ID 추출하는 함수
+  const getUserIdFromToken = (token: string): number | null => {
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      return payload.sub ? parseInt(payload.sub) : null;
+    } catch (error) {
+      console.error('토큰에서 사용자 ID 추출 실패:', error);
+      return null;
+    }
+  };
+
+  // 현재 사용자 정보 로드
+  React.useEffect(() => {
+    loadCurrentUserInfo();
+  }, []);
+
+  // 과제 목록 로드 (화면 포커스 시마다 새로고침)
+  useFocusEffect(
+    React.useCallback(() => {
+      if (currentUserId !== null && roomId) {
+        loadTasks();
+      }
+    }, [currentUserId, roomId])
+  );
+
+  const loadCurrentUserInfo = async () => {
+    try {
+      const token = await getAccessToken();
+      if (token) {
+        const userId = getUserIdFromToken(token);
+        setCurrentUserId(userId);
+        console.log('👤 현재 사용자 ID:', userId);
+      } else {
+        console.error('❌ JWT 토큰을 찾을 수 없습니다');
+        setCurrentUserId(1);
+      }
+    } catch (error) {
+      console.error('❌ 현재 사용자 정보 로드 실패:', error);
+      setCurrentUserId(1);
+    }
+  };
+
+  const loadTasks = async () => {
+    if (!roomId) return;
+
+    try {
+      setIsLoading(true);
+      console.log('🚀 과제 목록 로드:', { roomId });
+
+      const tasks = await TaskService.getTasks(Number(roomId));
+      const transformedTasks = tasks.map((task) =>
+        TaskService.transformTaskForUI(task, memberMap)
+      );
+
+      setTasks(transformedTasks);
+      console.log('✅ 과제 목록 로드 성공:', transformedTasks.length, '개');
+    } catch (error: any) {
+      console.error('❌ 과제 목록 로드 실패:', error);
+      Alert.alert('로드 실패', '과제 목록을 불러오는 중 오류가 발생했습니다.');
+      setTasks([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleBackPress = () => {
     router.back();
@@ -101,7 +118,7 @@ export default function TaskSubmissionsScreen() {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
-  const getSubmissionStatus = (member: AssignedMember) => {
+  const getSubmissionStatus = (member: TaskMember) => {
     if (member.hasSubmitted) {
       return { text: '제출완료', color: '#4CAF50' };
     } else {
@@ -109,17 +126,21 @@ export default function TaskSubmissionsScreen() {
     }
   };
 
-  const renderTask = (task: Task) => (
-    <View key={task.id} style={styles.taskCard}>
+  const renderTask = (task: TaskWithMembers) => (
+    <View key={task.assignmentId} style={styles.taskCard}>
       <View style={styles.taskHeader}>
         <Text style={styles.taskTitle}>{task.title}</Text>
-        <Text style={styles.taskDeadline}>마감: {task.deadline}</Text>
+        <Text style={styles.taskDeadline}>
+          마감: {TaskService.formatDateFromISO(task.due)}
+        </Text>
       </View>
 
       <Text style={styles.taskDescription}>{task.description}</Text>
 
       <View style={styles.taskMeta}>
-        <Text style={styles.taskCreatedAt}>생성일: {task.createdAt}</Text>
+        <Text style={styles.taskCreatedAt}>
+          생성일: {TaskService.formatDateFromISO(task.createdAt)}
+        </Text>
       </View>
 
       <View style={styles.submissionsSection}>
@@ -129,7 +150,9 @@ export default function TaskSubmissionsScreen() {
           return (
             <View key={member.id} style={styles.memberCard}>
               <View style={styles.memberInfo}>
-                <Image source={member.avatar} style={styles.memberAvatar} />
+                <View style={styles.memberAvatar}>
+                  <Text style={styles.avatarText}>{member.name.charAt(0)}</Text>
+                </View>
                 <View style={styles.memberDetails}>
                   <Text style={styles.memberName}>{member.name}</Text>
                   <View style={styles.statusContainer}>
@@ -142,9 +165,9 @@ export default function TaskSubmissionsScreen() {
                     <Text style={[styles.statusText, { color: status.color }]}>
                       {status.text}
                     </Text>
-                    {member.submittedAt && (
+                    {member.hasSubmitted && member.submittedAt && (
                       <Text style={styles.submittedAt}>
-                        ({member.submittedAt})
+                        ({TaskService.formatDateFromISO(member.submittedAt)})
                       </Text>
                     )}
                   </View>
@@ -153,36 +176,12 @@ export default function TaskSubmissionsScreen() {
 
               {member.hasSubmitted && (
                 <View style={styles.submissionDetails}>
-                  {member.submissionText && (
-                    <View style={styles.submissionTextContainer}>
-                      <Text style={styles.submissionTextLabel}>제출 내용:</Text>
-                      <Text style={styles.submissionText}>
-                        {member.submissionText}
-                      </Text>
-                    </View>
-                  )}
-
-                  {member.submittedFiles &&
-                    member.submittedFiles.length > 0 && (
-                      <View style={styles.submittedFilesContainer}>
-                        <Text style={styles.submittedFilesLabel}>
-                          첨부 파일:
-                        </Text>
-                        {member.submittedFiles.map((file) => (
-                          <View key={file.id} style={styles.fileItem}>
-                            <Ionicons
-                              name="document"
-                              size={16}
-                              color="#CCCCCC"
-                            />
-                            <Text style={styles.fileName}>{file.name}</Text>
-                            <Text style={styles.fileSize}>
-                              ({formatFileSize(file.size)})
-                            </Text>
-                          </View>
-                        ))}
-                      </View>
-                    )}
+                  <View style={styles.submissionTextContainer}>
+                    <Text style={styles.submissionTextLabel}>제출 내용:</Text>
+                    <Text style={styles.submissionText}>
+                      과제가 제출되었습니다.
+                    </Text>
+                  </View>
                 </View>
               )}
             </View>
@@ -206,7 +205,12 @@ export default function TaskSubmissionsScreen() {
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {tasks.length === 0 ? (
+        {isLoading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#007AFF" />
+            <Text style={styles.loadingText}>과제 목록을 불러오는 중...</Text>
+          </View>
+        ) : tasks.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Ionicons name="document-outline" size={64} color="#666666" />
             <Text style={styles.emptyTitle}>생성된 과제가 없습니다</Text>
@@ -358,6 +362,14 @@ const styles = StyleSheet.create({
     height: 32,
     borderRadius: 16,
     marginRight: 12,
+    backgroundColor: '#007AFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
   },
   memberDetails: {
     flex: 1,
@@ -434,5 +446,15 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#888888',
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 60,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#CCCCCC',
+    marginTop: 16,
+  },
 });
-

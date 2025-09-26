@@ -13,8 +13,14 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { logout } from '../../../src/services/authService';
-import { getUserInfo, UserInfo } from '../../../src/services/api';
+import { logout as authLogout } from '../../../src/services/authService';
+import {
+  getUserInfo,
+  UserInfo,
+  logout,
+  withdraw,
+} from '../../../src/services/api';
+import { AvatarService } from '../../../src/services/avatarService';
 
 const { width } = Dimensions.get('window');
 
@@ -22,6 +28,23 @@ export default function MyPageScreen() {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
   const [isLoadingUserInfo, setIsLoadingUserInfo] = useState(true);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [isLoadingAvatar, setIsLoadingAvatar] = useState(false);
+
+  // 아바타 URL 가져오기
+  const fetchAvatarUrl = async () => {
+    try {
+      setIsLoadingAvatar(true);
+      const avatarResponse = await AvatarService.getAvatarUrl();
+      setAvatarUrl(avatarResponse.url);
+      console.log('아바타 URL 로드:', avatarResponse.url);
+    } catch (error) {
+      console.error('아바타 URL 가져오기 실패:', error);
+      // 에러가 발생해도 기본 이미지 사용
+    } finally {
+      setIsLoadingAvatar(false);
+    }
+  };
 
   // 프로필 탭이 포커스될 때마다 사용자 정보 가져오기
   useFocusEffect(
@@ -32,6 +55,9 @@ export default function MyPageScreen() {
           const userData = await getUserInfo();
           setUserInfo(userData);
           console.log('마이페이지 사용자 정보 로드:', userData);
+
+          // 사용자 정보 로드 후 아바타 URL 가져오기
+          await fetchAvatarUrl();
         } catch (error) {
           console.error('사용자 정보 가져오기 실패:', error);
           // 에러가 발생해도 기본값으로 계속 진행
@@ -86,7 +112,12 @@ export default function MyPageScreen() {
         onPress: async () => {
           try {
             setIsLoggingOut(true);
-            const success = await logout();
+
+            // 서버에 리프레시 토큰 만료 요청
+            await logout();
+
+            // 로컬 토큰 삭제 및 로그아웃 처리
+            const success = await authLogout();
 
             if (success) {
               Alert.alert('성공', '로그아웃되었습니다.');
@@ -106,7 +137,39 @@ export default function MyPageScreen() {
   };
 
   const handleWithdraw = () => {
-    console.log('탈퇴하기');
+    Alert.alert(
+      '회원 탈퇴',
+      '정말로 탈퇴하시겠습니까?\n\n탈퇴 시 모든 데이터가 삭제되며, 결제한 금액은 환불받을 수 없습니다.',
+      [
+        {
+          text: '취소',
+          style: 'cancel',
+        },
+        {
+          text: '탈퇴하기',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              // 서버에 회원 탈퇴 요청
+              await withdraw();
+
+              // 로컬 토큰 삭제 및 로그아웃 처리
+              await authLogout();
+
+              Alert.alert('탈퇴 완료', '회원 탈퇴가 완료되었습니다.');
+              router.replace('/(auth)');
+            } catch (error) {
+              console.error('회원 탈퇴 에러:', error);
+              Alert.alert('오류', '회원 탈퇴 중 오류가 발생했습니다.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleGifticon = () => {
+    router.push('/(tabs)/profile/gifticon');
   };
 
   return (
@@ -129,14 +192,22 @@ export default function MyPageScreen() {
         {/* 프로필 섹션 */}
         <View style={styles.profileSection}>
           <View style={styles.profileImageContainer}>
-            {isLoadingUserInfo ? (
+            {isLoadingUserInfo || isLoadingAvatar ? (
               <View style={styles.profileImageLoading}>
                 <ActivityIndicator size="large" color="#4A90E2" />
               </View>
             ) : (
               <Image
-                source={require('@/assets/images/(myPage)/myCat.jpeg')}
+                source={
+                  avatarUrl
+                    ? { uri: avatarUrl }
+                    : require('@/assets/images/(myPage)/myCat.jpeg')
+                }
                 style={styles.profileImage}
+                onError={() => {
+                  console.log('아바타 이미지 로드 실패, 기본 이미지 사용');
+                  setAvatarUrl(null);
+                }}
               />
             )}
             <View style={styles.profileImageBorder} />
@@ -208,6 +279,26 @@ export default function MyPageScreen() {
               <Text style={styles.versionText}>v1.0.0</Text>
               <Ionicons name="chevron-forward" size={16} color="#666666" />
             </View>
+          </TouchableOpacity>
+        </View>
+
+        {/* 기프티콘 섹션 */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>기프티콘</Text>
+          </View>
+          <TouchableOpacity
+            style={[styles.menuItem, styles.lastMenuItem]}
+            onPress={handleGifticon}
+          >
+            <Ionicons
+              name="gift"
+              size={20}
+              color="#FFFFFF"
+              style={styles.menuIcon}
+            />
+            <Text style={styles.menuText}>내 기프티콘</Text>
+            <Ionicons name="chevron-forward" size={16} color="#666666" />
           </TouchableOpacity>
         </View>
 

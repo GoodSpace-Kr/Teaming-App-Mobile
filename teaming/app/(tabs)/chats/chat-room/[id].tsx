@@ -35,6 +35,7 @@ import { FileService } from '@/src/services/fileService';
 import { UploadProgress } from '@/src/types/file';
 import {
   getMessageHistory,
+  getUserInfo,
   type ChatMessage as ApiChatMessage,
 } from '@/src/services/api';
 
@@ -48,6 +49,7 @@ interface Message {
   timestamp: string;
   isMe: boolean;
   readCount?: number; // 선택적 속성으로 변경 (나중에 사용 예정)
+  attachments?: any[]; // 파일 첨부 정보
 }
 
 interface ChatRoomData {
@@ -59,10 +61,12 @@ interface ChatRoomData {
 }
 
 export default function ChatRoomScreen() {
-  const { id, role, success } = useLocalSearchParams<{
+  const { id, role, success, members, title } = useLocalSearchParams<{
     id: string;
     role?: string;
     success?: string;
+    members?: string;
+    title?: string;
   }>();
   const [inputText, setInputText] = useState('');
   const [showFileMenu, setShowFileMenu] = useState(false);
@@ -78,7 +82,9 @@ export default function ChatRoomScreen() {
     'connecting' | 'connected' | 'disconnected' | 'error'
   >('disconnected');
   const [currentUserId, setCurrentUserId] = useState<number | null>(null);
+  const [currentUserName, setCurrentUserName] = useState<string>('');
   const [isTeamCompleted, setIsTeamCompleted] = useState(false);
+  const [actualMembers, setActualMembers] = useState<any[]>([]);
   const scrollViewRef = useRef<ScrollView>(null);
 
   // JWT 토큰에서 사용자 ID 추출하는 함수
@@ -90,6 +96,39 @@ export default function ChatRoomScreen() {
       console.error('토큰에서 사용자 ID 추출 실패:', error);
       return null;
     }
+  };
+
+  // 메시지에서 실제 멤버 목록을 추출하는 함수
+  const extractMembersFromMessages = (messages: ChatMessage[]) => {
+    const memberMap = new Map<number, any>();
+
+    messages.forEach((message) => {
+      if (message.sender && message.sender.id) {
+        const senderId = message.sender.id;
+        if (!memberMap.has(senderId)) {
+          memberMap.set(senderId, {
+            memberId: senderId,
+            name: message.sender.name || 'Unknown',
+            avatarKey: message.sender.avatarUrl || '',
+            avatarVersion: 0, // ChatSender에 avatarVersion이 없으므로 기본값 사용
+            roomRole:
+              senderId === currentUserId && role === 'LEADER'
+                ? 'LEADER'
+                : 'MEMBER',
+          });
+        }
+      }
+    });
+
+    // 팀장을 맨 위로, 나머지는 이름순으로 정렬
+    const members = Array.from(memberMap.values()).sort((a, b) => {
+      if (a.roomRole === 'LEADER' && b.roomRole !== 'LEADER') return -1;
+      if (a.roomRole !== 'LEADER' && b.roomRole === 'LEADER') return 1;
+      return a.name.localeCompare(b.name);
+    });
+
+    console.log('📋 메시지에서 추출한 실제 멤버 목록:', members);
+    return members;
   };
 
   // 메시지 히스토리 로드 함수
@@ -121,6 +160,10 @@ export default function ChatRoomScreen() {
       );
       setMessages(historyMessages);
 
+      // 메시지에서 실제 멤버 목록 추출
+      const extractedMembers = extractMembersFromMessages(historyMessages);
+      setActualMembers(extractedMembers);
+
       // 히스토리 로드 후 스크롤을 맨 아래로
       setTimeout(() => {
         scrollViewRef.current?.scrollToEnd({ animated: false });
@@ -130,6 +173,21 @@ export default function ChatRoomScreen() {
       // 에러가 발생해도 웹소켓 연결은 계속 진행
     }
   };
+
+  // 현재 사용자 정보 로드
+  useEffect(() => {
+    const loadCurrentUserInfo = async () => {
+      try {
+        const userInfo = await getUserInfo();
+        setCurrentUserName(userInfo.name);
+        console.log('👤 현재 사용자 정보:', userInfo);
+      } catch (error) {
+        console.error('❌ 현재 사용자 정보 로드 실패:', error);
+      }
+    };
+
+    loadCurrentUserInfo();
+  }, []);
 
   // role 및 success 정보 로깅
   useEffect(() => {
@@ -144,6 +202,26 @@ export default function ChatRoomScreen() {
       console.log('🏠 채팅방 완료 상태:', isCompleted);
     }
   }, [role, id, success]);
+
+  // 채팅방 정보 로드
+  useEffect(() => {
+    loadChatRoomInfo();
+  }, [id, title]);
+
+  const loadChatRoomInfo = async () => {
+    try {
+      // 실제로는 API에서 채팅방 정보를 가져와야 함
+      // 현재는 전달받은 title만 사용
+      setChatRoomData((prev) => ({
+        ...prev,
+        title: title ? decodeURIComponent(title) : '정치학 발표',
+        memberCount:
+          actualMembers.length > 0 ? `${actualMembers.length}명` : '0',
+      }));
+    } catch (error) {
+      console.error('❌ 채팅방 정보 로드 실패:', error);
+    }
+  };
 
   // JWT 토큰 가져오기 및 STOMP 연결
   useEffect(() => {
@@ -253,14 +331,14 @@ export default function ChatRoomScreen() {
     loadTokenAndConnect();
   }, [id]);
 
-  // 목데이터 - 실제로는 API에서 가져올 데이터
-  const chatRoomData: ChatRoomData = {
+  // 채팅방 데이터 - 실제 API에서 가져올 데이터
+  const [chatRoomData, setChatRoomData] = useState<ChatRoomData>({
     id: Number(id),
-    title: '정치학 발표',
+    title: title ? decodeURIComponent(title) : '정치학 발표',
     subtitle: '정치학개론',
-    members: require('../../../../assets/images/(beforeLogin)/bluePeople.png'),
-    memberCount: '3/4명',
-  };
+    members: null,
+    memberCount: '0',
+  });
 
   // 메시지 목록을 표시용 메시지로 변환
   console.log('🔄 현재 메시지 개수:', messages.length);
@@ -270,9 +348,7 @@ export default function ChatRoomScreen() {
     id: msg.messageId || 0,
     text: msg.content || '',
     user: msg.sender?.name || 'Unknown',
-    userImage: msg.sender?.avatarUrl
-      ? { uri: msg.sender.avatarUrl }
-      : require('../../../../assets/images/(beforeLogin)/bluePeople.png'),
+    userImage: msg.sender?.avatarUrl ? { uri: msg.sender.avatarUrl } : null,
     timestamp: msg.createdAt
       ? new Date(msg.createdAt).toLocaleTimeString('ko-KR', {
           hour: '2-digit',
@@ -285,6 +361,7 @@ export default function ChatRoomScreen() {
           hour12: true,
         }),
     isMe: currentUserId !== null && msg.sender?.id === currentUserId, // 현재 사용자 ID와 비교
+    attachments: msg.attachments || [], // 파일 첨부 정보 추가
     // readCount: 1, // TODO: 실제 읽음 수 구현 - 주석 처리 (나중에 사용 예정)
   }));
 
@@ -296,8 +373,26 @@ export default function ChatRoomScreen() {
   const handleMenuPress = () => {
     // URL 파라미터에서 팀장 여부 확인
     const isTeamLeader = role === 'LEADER';
+
+    // 실제 멤버 정보를 전달 (메시지에서 추출한 정보 우선 사용)
+    let membersToPass = actualMembers;
+    if (membersToPass.length === 0 && members) {
+      // actualMembers가 없으면 기존 members 사용
+      try {
+        membersToPass = JSON.parse(decodeURIComponent(members as string));
+      } catch (error) {
+        console.error('❌ members 파싱 실패:', error);
+        membersToPass = [];
+      }
+    }
+
+    const membersParam =
+      membersToPass.length > 0
+        ? `&members=${encodeURIComponent(JSON.stringify(membersToPass))}`
+        : '';
+    const titleParam = title ? `&title=${encodeURIComponent(title)}` : '';
     router.push(
-      `/(tabs)/chats/chat-menu?roomId=${id}&isLeader=${isTeamLeader}&isCompleted=${isTeamCompleted}`
+      `/(tabs)/chats/chat-menu?roomId=${id}&isLeader=${isTeamLeader}&isCompleted=${isTeamCompleted}${membersParam}${titleParam}`
     );
   };
 
@@ -448,6 +543,8 @@ export default function ChatRoomScreen() {
       // SockJS 클라이언트로 파일 메시지 전송
       if (fileType === 'image') {
         sendImageSock(Number(id), fileName, [fileId]);
+      } else if (fileType === 'video') {
+        sendFileSock(Number(id), fileName, [fileId]);
       } else {
         sendFileSock(Number(id), fileName, [fileId]);
       }
@@ -505,8 +602,9 @@ export default function ChatRoomScreen() {
           showTail={showTail}
           isContinuous={isContinuous}
           timestamp={message.timestamp}
+          attachments={message.attachments}
           // readCount={message.readCount} // 주석 처리 (나중에 사용 예정)
-          backgroundColor={message.isMe ? '#007AFF' : '#333333'}
+          backgroundColor={message.isMe ? '#007AFF' : '#121216'}
           textColor="#FFFFFF"
         />
       </View>

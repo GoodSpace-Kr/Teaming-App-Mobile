@@ -110,11 +110,14 @@ apiClient.interceptors.response.use(
       );
     }
 
-    // 401 에러 처리 (토큰 만료)
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    // 401, 403 에러 처리 (토큰 만료 또는 권한 없음)
+    if (
+      (error.response?.status === 401 || error.response?.status === 403) &&
+      !originalRequest._retry
+    ) {
       originalRequest._retry = true;
 
-      console.log('🔄 토큰 만료 감지, 토큰 갱신 시도...');
+      console.log('🔄 토큰 만료/권한 오류 감지, 토큰 갱신 시도...');
 
       try {
         const refreshSuccess = await refreshAccessToken();
@@ -378,6 +381,108 @@ export const getMessageHistory = async (
     return response.data;
   } catch (error: any) {
     console.error('❌ 메시지 히스토리 조회 실패:', error);
+    throw error;
+  }
+};
+
+// 채팅방 상세 정보 조회 API (멤버 정보 포함)
+export interface RoomDetailResponse {
+  roomId: number;
+  title: string;
+  description: string;
+  imageKey: string;
+  imageVersion: number;
+  type: 'DEMO' | 'BASIC' | 'STANDARD' | 'ELITE';
+  memberCount: number;
+  maxMemberCount: number;
+  isCompleted: boolean;
+  role: 'LEADER' | 'MEMBER';
+  members: Array<{
+    memberId: number;
+    name: string;
+    avatarKey: string;
+    avatarVersion: number;
+    roomRole: 'LEADER' | 'MEMBER';
+    lastReadMessageId: number;
+  }>;
+}
+
+export const getRoomDetail = async (
+  roomId: number
+): Promise<RoomDetailResponse> => {
+  try {
+    console.log('🚀 채팅방 상세 정보 조회 API 요청 - roomId:', roomId);
+    const response = await apiClient.get<RoomDetailResponse>(
+      `/rooms/${roomId}`
+    );
+    console.log('✅ 채팅방 상세 정보 조회 성공:', response.data);
+    return response.data;
+  } catch (error: any) {
+    console.error('❌ 채팅방 상세 정보 조회 실패:', error);
+    throw error;
+  }
+};
+
+// 아바타 URL 발급 API
+export interface AvatarUrlResponse {
+  url: string;
+}
+
+export const getAvatarUrl = async (): Promise<AvatarUrlResponse> => {
+  try {
+    console.log('🚀 아바타 URL 발급 API 요청');
+    const response = await apiClient.post<AvatarUrlResponse>(
+      '/users/me/avatar/url'
+    );
+    console.log('✅ 아바타 URL 발급 성공:', response.data);
+    return response.data;
+  } catch (error: any) {
+    console.error('❌ 아바타 URL 발급 실패:', error);
+    throw error;
+  }
+};
+
+// 기프티콘 조회 API
+export interface GifticonItem {
+  code: string;
+  expirationDateStr: string;
+  grade: 'BASIC' | 'STANDARD' | 'ELITE';
+}
+
+export const getGifticons = async (userId: number): Promise<GifticonItem[]> => {
+  try {
+    console.log('🚀 기프티콘 조회 API 요청 - userId:', userId);
+    const response = await apiClient.get<GifticonItem[]>('/admin/gifticon', {
+      params: { userId },
+    });
+    console.log('✅ 기프티콘 조회 성공:', response.data);
+    return response.data;
+  } catch (error: any) {
+    console.error('❌ 기프티콘 조회 실패:', error);
+    throw error;
+  }
+};
+
+// 로그아웃 API (리프레시 토큰 만료)
+export const logout = async (): Promise<void> => {
+  try {
+    console.log('🚀 로그아웃 API 요청');
+    const response = await apiClient.delete('/users/me/log-out');
+    console.log('✅ 로그아웃 성공:', response.data);
+  } catch (error: any) {
+    console.error('❌ 로그아웃 실패:', error);
+    throw error;
+  }
+};
+
+// 회원 탈퇴 API
+export const withdraw = async (): Promise<void> => {
+  try {
+    console.log('🚀 회원 탈퇴 API 요청');
+    const response = await apiClient.delete('/users/me/withdraw');
+    console.log('✅ 회원 탈퇴 성공:', response.data);
+  } catch (error: any) {
+    console.error('❌ 회원 탈퇴 실패:', error);
     throw error;
   }
 };

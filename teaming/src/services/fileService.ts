@@ -6,8 +6,8 @@ import {
   FileUploadCompleteResponse,
   FileDownloadUrlResponse,
   UploadProgress,
+  FileItem,
 } from '@/src/types/file';
-import * as Crypto from 'expo-crypto';
 
 /**
  * 파일 업로드 서비스
@@ -29,13 +29,20 @@ export class FileService {
 
       const response = await apiClient.post<FileUploadIntentResponse>(
         `/files/intent/${roomId}`,
-        fileInfo
+        fileInfo,
+        {
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        }
       );
 
       console.log('✅ 파일 업로드 의도 등록 성공:', response.data);
       return response.data;
     } catch (error: any) {
       console.error('❌ 파일 업로드 의도 등록 실패:', error);
+      console.error('에러 상태:', error.response?.status);
+      console.error('에러 데이터:', error.response?.data);
       throw error;
     }
   }
@@ -65,25 +72,21 @@ export class FileService {
       const response = await fetch(fileUri);
       const blob = await response.blob();
 
-      // SHA-256 해시 계산
-      const arrayBuffer = await blob.arrayBuffer();
-      const hashBuffer = await Crypto.digestStringAsync(
-        Crypto.CryptoDigestAlgorithm.SHA256,
-        new Uint8Array(arrayBuffer).toString(),
-        { encoding: Crypto.CryptoEncoding.BASE64 }
-      );
-
-      // S3에 PUT 요청
+      // S3에 PUT 요청 (Content-Type만 포함)
       const uploadResponse = await fetch(presignedUrl, {
         method: 'PUT',
         body: blob,
         headers: {
           'Content-Type': contentType,
-          'x-amz-checksum-sha256': hashBuffer,
         },
       });
 
       if (!uploadResponse.ok) {
+        console.error('❌ S3 업로드 실패 응답:', {
+          status: uploadResponse.status,
+          statusText: uploadResponse.statusText,
+          headers: Object.fromEntries(uploadResponse.headers.entries()),
+        });
         throw new Error(`S3 업로드 실패: ${uploadResponse.status}`);
       }
 
@@ -110,13 +113,20 @@ export class FileService {
 
       const response = await apiClient.post<FileUploadCompleteResponse>(
         `/files/complete/${roomId}`,
-        { key }
+        { key },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        }
       );
 
       console.log('✅ 파일 업로드 완료 확인 성공:', response.data);
       return response.data;
     } catch (error: any) {
       console.error('❌ 파일 업로드 완료 확인 실패:', error);
+      console.error('에러 상태:', error.response?.status);
+      console.error('에러 데이터:', error.response?.data);
       throw error;
     }
   }
@@ -133,13 +143,21 @@ export class FileService {
       console.log('🚀 파일 다운로드 URL 발급:', { fileId });
 
       const response = await apiClient.post<FileDownloadUrlResponse>(
-        `/files/download-url/${fileId}`
+        `/files/download-url/${fileId}`,
+        {},
+        {
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        }
       );
 
       console.log('✅ 파일 다운로드 URL 발급 성공:', response.data);
       return response.data;
     } catch (error: any) {
       console.error('❌ 파일 다운로드 URL 발급 실패:', error);
+      console.error('에러 상태:', error.response?.status);
+      console.error('에러 데이터:', error.response?.data);
       throw error;
     }
   }

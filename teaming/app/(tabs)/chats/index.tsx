@@ -127,10 +127,15 @@ export default function ChatsScreen() {
   const handleEnterChatRoom = (
     roomId: number,
     role: 'LEADER' | 'MEMBER',
-    success: boolean
+    success: boolean,
+    members: any[],
+    title: string
   ) => {
+    // members 정보를 JSON 문자열로 인코딩하여 전달
+    const membersParam = encodeURIComponent(JSON.stringify(members));
+    const titleParam = encodeURIComponent(title);
     router.push(
-      `/(tabs)/chats/chat-room/${roomId}?role=${role}&success=${success}`
+      `/(tabs)/chats/chat-room/${roomId}?role=${role}&success=${success}&members=${membersParam}&title=${titleParam}`
     );
   };
 
@@ -197,7 +202,13 @@ export default function ChatsScreen() {
               key={room.roomId}
               style={styles.chatRoomCard}
               onPress={() =>
-                handleEnterChatRoom(room.roomId, room.role, room.success)
+                handleEnterChatRoom(
+                  room.roomId,
+                  room.role,
+                  room.success,
+                  room.members,
+                  room.title
+                )
               }
             >
               <View style={styles.chatRoomContent}>
@@ -243,11 +254,6 @@ export default function ChatsScreen() {
                           />
                         </View>
                       )}
-                    </View>
-                    <View style={styles.rightInfoContainer}>
-                      <Text style={styles.memberCount}>
-                        {room.memberCount}명
-                      </Text>
                     </View>
                   </View>
 
@@ -433,7 +439,6 @@ const styles = StyleSheet.create({
   // 채팅방 정보
   roomTitleRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 4,
   },
@@ -450,13 +455,6 @@ const styles = StyleSheet.create({
     marginBottom: 5,
     justifyContent: 'center',
     marginLeft: 8,
-  },
-  rightInfoContainer: {
-    alignItems: 'flex-end',
-  },
-  memberCount: {
-    fontSize: 12,
-    color: '#888888',
   },
 
   timeContainer: {
