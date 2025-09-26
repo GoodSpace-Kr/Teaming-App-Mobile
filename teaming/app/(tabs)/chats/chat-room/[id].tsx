@@ -183,8 +183,10 @@ export default function ChatRoomScreen() {
         scrollViewRef.current?.scrollToEnd({ animated: false });
       }, 200);
     } catch (error) {
-      console.error('❌ 메시지 히스토리 로드 실패:', error);
-      // 에러가 발생해도 웹소켓 연결은 계속 진행
+      console.log('⚠️ 메시지 히스토리 로드 실패 (무시됨):', error);
+      // 결제 완료된 방의 경우 메시지 히스토리 에러를 무시하고 웹소켓 연결은 계속 진행
+      // 빈 메시지 배열로 초기화
+      setMessages([]);
     }
   };
 
@@ -517,19 +519,24 @@ export default function ChatRoomScreen() {
       connectionStatus,
     });
 
-    if (inputText.trim() && isConnected) {
-      // SockJS 클라이언트로 메시지 전송
+    if (inputText.trim()) {
+      // 연결 상태와 관계없이 메시지 전송 시도
       console.log('📤 메시지 전송 시작:', inputText.trim());
-      sendTextSock(Number(id), inputText.trim());
-      console.log('📤 메시지 전송 완료');
-      setInputText('');
+      try {
+        sendTextSock(Number(id), inputText.trim());
+        console.log('📤 메시지 전송 완료');
+        setInputText('');
 
-      // 스크롤을 맨 아래로
-      setTimeout(() => {
-        scrollViewRef.current?.scrollToEnd({ animated: true });
-      }, 100);
-    } else if (!isConnected) {
-      Alert.alert('연결 오류', '웹소켓이 연결되지 않았습니다.');
+        // 스크롤을 맨 아래로
+        setTimeout(() => {
+          scrollViewRef.current?.scrollToEnd({ animated: true });
+        }, 100);
+      } catch (error) {
+        console.error('❌ 메시지 전송 실패:', error);
+        if (!isConnected) {
+          Alert.alert('연결 오류', '웹소켓이 연결되지 않았습니다.');
+        }
+      }
     }
   };
 
