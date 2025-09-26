@@ -12,6 +12,7 @@ import {
   Platform,
   Modal,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -19,6 +20,23 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import ChatBubble from '@/src/components/ChatBubble';
+import { getAccessToken } from '@/src/services/tokenManager';
+import {
+  connectSock,
+  subscribeRoomSock,
+  sendTextSock,
+  sendImageSock,
+  sendFileSock,
+  disconnectSock,
+  updateSockToken,
+  type ChatMessage,
+} from '@/src/services/stompClient';
+import { UploadProgress } from '@/src/types/file';
+import {
+  getMessageHistory,
+  getUserInfo,
+  type ChatMessage as ApiChatMessage,
+} from '@/src/services/api';
 
 const { width, height } = Dimensions.get('window');
 
@@ -29,7 +47,8 @@ interface Message {
   userImage?: any;
   timestamp: string;
   isMe: boolean;
-  readCount: number;
+  readCount?: number; // 선택적 속성으로 변경 (나중에 사용 예정)
+  attachments?: any[]; // 파일 첨부 정보
 }
 
 interface ChatRoomData {
@@ -41,123 +60,483 @@ interface ChatRoomData {
 }
 
 export default function ChatRoomScreen() {
-  const { id, isLeader } = useLocalSearchParams();
+  const { id, role, success, members, title } = useLocalSearchParams<{
+    id: string;
+    role?: string;
+    success?: string;
+    members?: string;
+    title?: string;
+  }>();
   const [inputText, setInputText] = useState('');
-  const [messages, setMessages] = useState<Message[]>([]);
   const [showFileMenu, setShowFileMenu] = useState(false);
+  const [jwt, setJwt] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(
+    null
+  );
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [isConnected, setIsConnected] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<
+    'connecting' | 'connected' | 'disconnected' | 'error'
+  >('disconnected');
+  const [currentUserId, setCurrentUserId] = useState<number | null>(null);
+  const [currentUserName, setCurrentUserName] = useState<string>('');
+  const [isTeamCompleted, setIsTeamCompleted] = useState(false);
+  const [actualMembers, setActualMembers] = useState<any[]>([]);
   const scrollViewRef = useRef<ScrollView>(null);
 
-  // 목데이터 - 실제로는 API에서 가져올 데이터
-  const chatRoomData: ChatRoomData = {
-    id: Number(id),
-    title: '정치학 발표',
-    subtitle: '정치학개론',
-    members: require('../../../../assets/images/(beforeLogin)/bluePeople.png'),
-    memberCount: '3/4명',
+  // JWT 토큰에서 사용자 ID 추출하는 함수
+  const getUserIdFromToken = (token: string): number | null => {
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      return payload.sub ? parseInt(payload.sub) : null;
+    } catch (error) {
+      console.error('토큰에서 사용자 ID 추출 실패:', error);
+      return null;
+    }
   };
 
-  // 목 메시지 데이터
+  // 메시지에서 실제 멤버 목록을 추출하는 함수
+  const extractMembersFromMessages = (messages: ChatMessage[]) => {
+    const memberMap = new Map<number, any>();
+
+    messages.forEach((message) => {
+      if (message.sender && message.sender.id) {
+        const senderId = message.sender.id;
+        if (!memberMap.has(senderId)) {
+          console.log('👤 멤버 정보 추출:', {
+            senderId,
+            name: message.sender.name,
+            avatarUrl: message.sender.avatarUrl,
+            avatarVersion: message.sender.avatarVersion,
+          });
+
+          memberMap.set(senderId, {
+            memberId: senderId,
+            name: message.sender.name || 'Unknown',
+            avatarKey: message.sender.avatarUrl || '',
+            avatarVersion: message.sender.avatarVersion || 0,
+            roomRole:
+              senderId === currentUserId && role === 'LEADER'
+                ? 'LEADER'
+                : 'MEMBER',
+          });
+        }
+      }
+    });
+
+    // 팀장을 맨 위로, 나머지는 이름순으로 정렬
+    const members = Array.from(memberMap.values()).sort((a, b) => {
+      if (a.roomRole === 'LEADER' && b.roomRole !== 'LEADER') return -1;
+      if (a.roomRole !== 'LEADER' && b.roomRole === 'LEADER') return 1;
+      return a.name.localeCompare(b.name);
+    });
+
+    console.log('📋 메시지에서 추출한 실제 멤버 목록:', members);
+    return members;
+  };
+
+  // 메시지 히스토리 로드 함수
+  const loadMessageHistory = async () => {
+    if (!id) return;
+
+    try {
+      console.log('🚀 메시지 히스토리 로드 시작 - roomId:', id);
+      const historyResponse = await getMessageHistory(Number(id));
+
+      // API 응답을 STOMP 메시지 형식으로 변환
+      const historyMessages: ChatMessage[] = historyResponse.items.map(
+        (apiMessage: ApiChatMessage) => ({
+          messageId: apiMessage.messageId,
+          roomId: apiMessage.roomId,
+          clientMessageId: apiMessage.clientMessageId,
+          type: apiMessage.type,
+          content: apiMessage.content,
+          createdAt: apiMessage.createdAt,
+          sender: apiMessage.sender,
+          attachments: apiMessage.attachments || [],
+        })
+      );
+
+      console.log(
+        '✅ 메시지 히스토리 로드 완료:',
+        historyMessages.length,
+        '개'
+      );
+
+      // 메시지를 시간순으로 정렬 (오래된 것부터 최신 순)
+      const sortedMessages = historyMessages.sort((a, b) => {
+        const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return timeA - timeB;
+      });
+
+      setMessages(sortedMessages);
+
+      // 메시지에서 실제 멤버 목록 추출
+      const extractedMembers = extractMembersFromMessages(historyMessages);
+      setActualMembers(extractedMembers);
+
+      // 히스토리 로드 후 스크롤을 맨 아래로
+      setTimeout(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: false });
+      }, 200);
+    } catch (error) {
+      console.log('⚠️ 메시지 히스토리 로드 실패 (무시됨):', error);
+      // 결제 완료된 방의 경우 메시지 히스토리 에러를 무시하고 웹소켓 연결은 계속 진행
+      // 빈 메시지 배열로 초기화
+      setMessages([]);
+    }
+  };
+
+  // 현재 사용자 정보 로드
   useEffect(() => {
-    const mockMessages: Message[] = [
-      {
-        id: 1,
-        text: '이번 프로젝트에서 팀장을 맡게된 최순조라고 합니다. 반갑습니다.',
-        user: '팀장 최순조',
-        userImage: require('../../../../assets/images/(beforeLogin)/bluePeople.png'),
-        timestamp: '오후 8:51',
-        isMe: false,
-        readCount: 1,
-      },
-      {
-        id: 2,
-        text: '제가 과제 하나 설정해했는데요 확인하시는 대로 답장 부탁드립니다.',
-        user: '팀장 최순조',
-        userImage: require('../../../../assets/images/(beforeLogin)/bluePeople.png'),
-        timestamp: '오후 8:52',
-        isMe: false,
-        readCount: 1,
-      },
-      {
-        id: 3,
-        text: '네 확인했습니다.',
-        user: '나',
-        timestamp: '오후 8:52',
-        isMe: true,
-        readCount: 1,
-      },
-      {
-        id: 4,
-        text: '비교정치학 책 읽고 3장 요약 하면 되는거 맞겠죠?',
-        user: '정치학존잘남',
-        userImage: require('../../../../assets/images/(beforeLogin)/purplePeople.png'),
-        timestamp: '오후 8:52',
-        isMe: false,
-        readCount: 1,
-      },
-      {
-        id: 5,
-        text: '아니',
-        user: '정치학존잘남',
-        userImage: require('../../../../assets/images/(beforeLogin)/purplePeople.png'),
-        timestamp: '오후 8:54',
-        isMe: false,
-        readCount: 1,
-      },
-      {
-        id: 6,
-        text: '좀 에바긴한데.. 페이지 보셨나요 ㅋㅋㅋ',
-        user: '정치학존잘남',
-        userImage: require('../../../../assets/images/(beforeLogin)/purplePeople.png'),
-        timestamp: '오후 8:54',
-        isMe: false,
-        readCount: 1,
-      },
-      {
-        id: 7,
-        text: '설명 읽으셨는지 모르겠지만 저희 벌칙 있는거 아시죠..?',
-        user: '팀장 최순조',
-        userImage: require('../../../../assets/images/(beforeLogin)/bluePeople.png'),
-        timestamp: '오후 8:55',
-        isMe: false,
-        readCount: 1,
-      },
-    ];
-    setMessages(mockMessages);
+    const loadCurrentUserInfo = async () => {
+      try {
+        const userInfo = await getUserInfo();
+        setCurrentUserName(userInfo.name);
+        console.log('👤 현재 사용자 정보:', userInfo);
+      } catch (error) {
+        console.error('❌ 현재 사용자 정보 로드 실패:', error);
+      }
+    };
+
+    loadCurrentUserInfo();
   }, []);
 
+  // role 및 success 정보 로깅
+  useEffect(() => {
+    if (role) {
+      console.log('👑 채팅방에서 사용자 역할:', role);
+      console.log('🏠 채팅방 ID:', id);
+    }
+
+    if (success !== undefined) {
+      const isCompleted = success === 'true';
+      setIsTeamCompleted(isCompleted);
+      console.log('🏠 채팅방 완료 상태:', isCompleted);
+    }
+  }, [role, id, success]);
+
+  // 채팅방 정보 로드
+  useEffect(() => {
+    loadChatRoomInfo();
+  }, [id, title]);
+
+  const loadChatRoomInfo = async () => {
+    try {
+      // 실제로는 API에서 채팅방 정보를 가져와야 함
+      // 현재는 전달받은 title만 사용
+      setChatRoomData((prev) => ({
+        ...prev,
+        title: title ? decodeURIComponent(title) : '정치학 발표',
+        memberCount:
+          actualMembers.length > 0 ? `${actualMembers.length}명` : '0',
+      }));
+    } catch (error) {
+      console.error('❌ 채팅방 정보 로드 실패:', error);
+    }
+  };
+
+  // JWT 토큰 가져오기 및 STOMP 연결
+  useEffect(() => {
+    const loadTokenAndConnect = async () => {
+      try {
+        const token = await getAccessToken();
+        setJwt(token);
+        console.log(
+          '✅ JWT 토큰 로드 완료:',
+          token ? '토큰 존재' : '토큰 없음'
+        );
+
+        // 토큰에서 사용자 ID 추출
+        if (token) {
+          const userId = getUserIdFromToken(token);
+          setCurrentUserId(userId);
+          console.log('👤 현재 사용자 ID:', userId);
+        }
+
+        if (token) {
+          // 메시지 히스토리 로드 (웹소켓 연결과 병렬로 실행)
+          loadMessageHistory();
+
+          // SockJS 연결 시작
+          setConnectionStatus('connecting');
+
+          try {
+            await connectSock(token);
+
+            // connectSock이 성공했다면 연결된 것으로 간주
+            setIsConnected(true);
+            setConnectionStatus('connected');
+            console.log('✅ SockJS 연결 성공');
+
+            // 채팅방 구독 (연결 완료 후 약간의 지연)
+            setTimeout(() => {
+              console.log('🔔 구독 시작 - 방 ID:', Number(id));
+              const unsubscribe = subscribeRoomSock(Number(id), (message) => {
+                console.log('📨 새 메시지 수신:', message);
+                console.log('📨 메시지 타입:', typeof message);
+                console.log(
+                  '📨 메시지 내용:',
+                  JSON.stringify(message, null, 2)
+                );
+                setMessages((prev) => {
+                  console.log('📨 이전 메시지 개수:', prev.length);
+
+                  // 중복 메시지 체크 (messageId로 확인)
+                  const isDuplicate = prev.some(
+                    (existingMessage) =>
+                      existingMessage.messageId === message.messageId
+                  );
+
+                  if (isDuplicate) {
+                    console.log('📨 중복 메시지 무시:', message.messageId);
+                    return prev;
+                  }
+
+                  // 새 메시지 추가 후 시간순으로 정렬 (최신 메시지가 아래로)
+                  const newMessages = [...prev, message].sort((a, b) => {
+                    const timeA = a.createdAt
+                      ? new Date(a.createdAt).getTime()
+                      : 0;
+                    const timeB = b.createdAt
+                      ? new Date(b.createdAt).getTime()
+                      : 0;
+                    return timeA - timeB; // 오름차순 유지 (오래된 것부터)
+                  });
+
+                  console.log('📨 새로운 메시지 개수:', newMessages.length);
+
+                  // 새 메시지가 추가되면 자동으로 스크롤을 맨 아래로
+                  setTimeout(() => {
+                    scrollViewRef.current?.scrollToEnd({ animated: true });
+                  }, 100);
+
+                  return newMessages;
+                });
+              });
+              console.log('🔔 구독 함수 반환됨');
+
+              // 컴포넌트 언마운트 시 정리
+              return () => {
+                console.log('🔔 구독 해제');
+                unsubscribe();
+                disconnectSock();
+              };
+            }, 1000);
+          } catch (error) {
+            console.error('SockJS 연결 실패:', error);
+            setConnectionStatus('error');
+            throw error;
+          }
+        }
+      } catch (error) {
+        console.error('토큰 로드 또는 연결 실패:', error);
+        setConnectionStatus('error');
+        Alert.alert(
+          '오류',
+          '인증 토큰을 가져올 수 없거나 연결에 실패했습니다.'
+        );
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadTokenAndConnect();
+  }, [id]);
+
+  // 채팅방 데이터 - 실제 API에서 가져올 데이터
+  const [chatRoomData, setChatRoomData] = useState<ChatRoomData>({
+    id: Number(id),
+    title: title ? decodeURIComponent(title) : '정치학 발표',
+    subtitle: '정치학개론',
+    members: null,
+    memberCount: '0',
+  });
+
+  // 메시지 목록을 표시용 메시지로 변환
+  console.log('🔄 현재 메시지 개수:', messages.length);
+  console.log('🔄 현재 메시지들:', messages);
+  console.log('👤 현재 사용자 ID:', currentUserId);
+  const displayMessages = messages.map((msg: ChatMessage) => {
+    console.log('📨 메시지 변환:', {
+      messageId: msg.messageId,
+      type: msg.type,
+      content: msg.content,
+      attachments: msg.attachments,
+    });
+
+    // attachments를 FileChatBubble에서 사용할 수 있는 형태로 변환
+    const formattedAttachments = (msg.attachments || []).map(
+      (attachment: any) => ({
+        fileId: attachment.fileId,
+        fileName: msg.content, // msg.content에서 파일명 가져오기
+        contentType: attachment.mimeType,
+        size: attachment.byteSize,
+      })
+    );
+
+    const isMe = currentUserId !== null && msg.sender?.id === currentUserId;
+
+    return {
+      id: msg.messageId || 0,
+      text: msg.content || '',
+      user: msg.sender?.name || 'Unknown',
+      userImage: msg.sender?.avatarUrl ? { uri: msg.sender.avatarUrl } : null,
+      timestamp: msg.createdAt
+        ? new Date(msg.createdAt).toLocaleTimeString('ko-KR', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true,
+          })
+        : new Date().toLocaleTimeString('ko-KR', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true,
+          }),
+      isMe, // 현재 사용자 ID와 비교
+      attachments: formattedAttachments, // 파일 첨부 정보 추가
+      // readCount: 1, // TODO: 실제 읽음 수 구현 - 주석 처리 (나중에 사용 예정)
+    };
+  });
+
+  // 백엔드가 허용하는 Content-Type으로 변환하는 함수
+  const getValidContentType = (
+    originalType: string,
+    fileName: string
+  ): string => {
+    // 백엔드가 허용하는 타입: image/, video/, audio/, application/pdf
+
+    // 이미 image/, video/, audio/로 시작하는 경우 그대로 사용
+    if (
+      originalType.startsWith('image/') ||
+      originalType.startsWith('video/') ||
+      originalType.startsWith('audio/') ||
+      originalType === 'application/pdf'
+    ) {
+      return originalType;
+    }
+
+    // 파일 확장자로 타입 추정
+    const extension = fileName.toLowerCase().split('.').pop();
+
+    switch (extension) {
+      // 이미지 파일
+      case 'jpg':
+      case 'jpeg':
+        return 'image/jpeg';
+      case 'png':
+        return 'image/png';
+      case 'gif':
+        return 'image/gif';
+      case 'webp':
+        return 'image/webp';
+
+      // 비디오 파일
+      case 'mp4':
+        return 'video/mp4';
+      case 'avi':
+        return 'video/avi';
+      case 'mov':
+        return 'video/quicktime';
+      case 'wmv':
+        return 'video/x-ms-wmv';
+
+      // 오디오 파일
+      case 'mp3':
+        return 'audio/mpeg';
+      case 'wav':
+        return 'audio/wav';
+      case 'aac':
+        return 'audio/aac';
+
+      // 문서 파일
+      case 'pdf':
+        return 'application/pdf';
+      case 'doc':
+        return 'application/msword';
+      case 'docx':
+        return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      case 'xls':
+        return 'application/vnd.ms-excel';
+      case 'xlsx':
+        return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+      case 'ppt':
+        return 'application/vnd.ms-powerpoint';
+      case 'pptx':
+        return 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+      case 'txt':
+        return 'text/plain';
+      case 'hwp':
+        return 'application/x-hwp';
+
+      // 기본값 (이미지로 처리)
+      default:
+        console.warn(
+          `알 수 없는 파일 타입: ${originalType}, 파일명: ${fileName}. image/jpeg로 처리합니다.`
+        );
+        return 'image/jpeg';
+    }
+  };
+
   const handleBackPress = () => {
+    // 좌측 슬라이드 애니메이션으로 뒤로가기
     router.back();
   };
 
   const handleMenuPress = () => {
     // URL 파라미터에서 팀장 여부 확인
-    const isTeamLeader = isLeader === 'true';
+    const isTeamLeader = role === 'LEADER';
+
+    // 실제 멤버 정보를 전달 (메시지에서 추출한 정보 우선 사용)
+    let membersToPass = actualMembers;
+    if (membersToPass.length === 0 && members) {
+      // actualMembers가 없으면 기존 members 사용
+      try {
+        membersToPass = JSON.parse(decodeURIComponent(members as string));
+      } catch (error) {
+        console.error('❌ members 파싱 실패:', error);
+        membersToPass = [];
+      }
+    }
+
+    const membersParam =
+      membersToPass.length > 0
+        ? `&members=${encodeURIComponent(JSON.stringify(membersToPass))}`
+        : '';
+    const titleParam = title ? `&title=${encodeURIComponent(title)}` : '';
     router.push(
-      `/(tabs)/chats/chat-menu?roomId=${id}&isLeader=${isTeamLeader}`
+      `/(tabs)/chats/chat-menu?roomId=${id}&isLeader=${isTeamLeader}&isCompleted=${isTeamCompleted}${membersParam}${titleParam}`
     );
   };
 
   const handleSendMessage = () => {
-    if (inputText.trim()) {
-      const newMessage: Message = {
-        id: messages.length + 1,
-        text: inputText.trim(),
-        user: '나',
-        timestamp: new Date().toLocaleTimeString('ko-KR', {
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: true,
-        }),
-        isMe: true,
-        readCount: 1,
-      };
-      setMessages([...messages, newMessage]);
-      setInputText('');
+    console.log('📤 메시지 전송 버튼 클릭:', {
+      inputText: inputText.trim(),
+      isConnected,
+      connectionStatus,
+    });
 
-      // 스크롤을 맨 아래로
-      setTimeout(() => {
-        scrollViewRef.current?.scrollToEnd({ animated: true });
-      }, 100);
+    if (inputText.trim()) {
+      // 연결 상태와 관계없이 메시지 전송 시도
+      console.log('📤 메시지 전송 시작:', inputText.trim());
+      try {
+        sendTextSock(Number(id), inputText.trim());
+        console.log('📤 메시지 전송 완료');
+        setInputText('');
+
+        // 스크롤을 맨 아래로
+        setTimeout(() => {
+          scrollViewRef.current?.scrollToEnd({ animated: true });
+        }, 100);
+      } catch (error) {
+        console.error('❌ 메시지 전송 실패:', error);
+        if (!isConnected) {
+          Alert.alert('연결 오류', '웹소켓이 연결되지 않았습니다.');
+        }
+      }
     }
   };
 
@@ -172,17 +551,25 @@ export default function ChatRoomScreen() {
 
       if (!result.canceled && result.assets[0]) {
         const asset = result.assets[0];
-        Alert.alert(
-          '이미지 선택됨',
-          `파일명: ${asset.fileName || '이미지'}\n크기: ${Math.round(
-            (asset.fileSize || 0) / 1024
-          )}KB`,
-          [{ text: '확인' }]
-        );
+        if (isConnected) {
+          const validContentType = getValidContentType(
+            asset.type || 'image/jpeg',
+            asset.fileName || '이미지'
+          );
+          await uploadAndSendFile(
+            asset.uri,
+            asset.fileName || '이미지',
+            validContentType,
+            asset.fileSize || 0,
+            'image'
+          );
+        } else {
+          Alert.alert('연결 오류', '웹소켓이 연결되지 않았습니다.');
+        }
         setShowFileMenu(false);
-        // TODO: 실제로는 이미지를 메시지로 전송하고 자료실에 추가
       }
     } catch (error) {
+      console.error('이미지 선택 오류:', error);
       Alert.alert('오류', '이미지를 선택하는 중 오류가 발생했습니다.');
     }
   };
@@ -197,17 +584,25 @@ export default function ChatRoomScreen() {
 
       if (!result.canceled && result.assets[0]) {
         const asset = result.assets[0];
-        Alert.alert(
-          '동영상 선택됨',
-          `파일명: ${asset.fileName || '동영상'}\n크기: ${Math.round(
-            (asset.fileSize || 0) / 1024
-          )}KB`,
-          [{ text: '확인' }]
-        );
+        if (isConnected) {
+          const validContentType = getValidContentType(
+            asset.type || 'video/mp4',
+            asset.fileName || '동영상'
+          );
+          await uploadAndSendFile(
+            asset.uri,
+            asset.fileName || '동영상',
+            validContentType,
+            asset.fileSize || 0,
+            'video'
+          );
+        } else {
+          Alert.alert('연결 오류', '웹소켓이 연결되지 않았습니다.');
+        }
         setShowFileMenu(false);
-        // TODO: 실제로는 동영상을 메시지로 전송하고 자료실에 추가
       }
     } catch (error) {
+      console.error('동영상 선택 오류:', error);
       Alert.alert('오류', '동영상을 선택하는 중 오류가 발생했습니다.');
     }
   };
@@ -221,23 +616,177 @@ export default function ChatRoomScreen() {
 
       if (!result.canceled && result.assets[0]) {
         const asset = result.assets[0];
-        Alert.alert(
-          '파일 선택됨',
-          `파일명: ${asset.name}\n크기: ${Math.round(
-            (asset.size || 0) / 1024
-          )}KB`,
-          [{ text: '확인' }]
-        );
+        if (isConnected) {
+          const validContentType = getValidContentType(
+            asset.mimeType || 'application/octet-stream',
+            asset.name
+          );
+          await uploadAndSendFile(
+            asset.uri,
+            asset.name,
+            validContentType,
+            asset.size || 0,
+            'document'
+          );
+        } else {
+          Alert.alert('연결 오류', '웹소켓이 연결되지 않았습니다.');
+        }
         setShowFileMenu(false);
-        // TODO: 실제로는 파일을 메시지로 전송하고 자료실에 추가
       }
     } catch (error) {
+      console.error('문서 선택 오류:', error);
       Alert.alert('오류', '파일을 선택하는 중 오류가 발생했습니다.');
     }
   };
 
+  // 파일 업로드 및 전송 통합 함수 (프론트엔드 방식 적용)
+  const uploadAndSendFile = async (
+    fileUri: string,
+    fileName: string,
+    contentType: string,
+    fileSize: number,
+    fileType: 'image' | 'video' | 'document'
+  ) => {
+    try {
+      setIsUploading(true);
+      setUploadProgress({ loaded: 0, total: fileSize, percentage: 0 });
+
+      console.log('=== 파일 업로드 Intent 시작 ===');
+      console.log('파일 정보:', {
+        name: fileName,
+        size: fileSize,
+        type: contentType,
+        uploadType: fileType,
+      });
+      console.log('백엔드로 전송할 Content-Type:', contentType);
+
+      // JWT 토큰 가져오기
+      const token = await getAccessToken();
+      if (!token) {
+        Alert.alert('오류', '인증 토큰이 없습니다.');
+        return;
+      }
+
+      // 1. Intent API 요청
+      const requestBody = {
+        fileName: fileName,
+        contentType: contentType,
+        size: fileSize,
+      };
+
+      const intentResponse = await fetch(
+        `https://teamingkr.duckdns.org/api/files/intent/${id}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(requestBody),
+        }
+      );
+
+      console.log('Intent API 응답 상태:', intentResponse.status);
+
+      if (!intentResponse.ok) {
+        const errorText = await intentResponse.text();
+        console.error('Intent API 실패:', errorText);
+        Alert.alert('업로드 실패', `파일 업로드 준비 실패: ${errorText}`);
+        return;
+      }
+
+      const intentData = await intentResponse.json();
+      console.log('Intent 성공:', intentData);
+
+      // 2. S3에 파일 업로드
+      console.log('=== S3 업로드 시작 ===');
+
+      // 파일을 Blob으로 변환 (프론트엔드와 동일한 방식)
+      const response = await fetch(fileUri);
+      const blob = await response.blob();
+
+      const s3UploadResponse = await fetch(intentData.url, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': contentType,
+        },
+        body: blob,
+      });
+
+      console.log('S3 업로드 응답 상태:', s3UploadResponse.status);
+
+      if (!s3UploadResponse.ok) {
+        const errorText = await s3UploadResponse.text();
+        console.error('S3 업로드 실패:', errorText);
+        Alert.alert('업로드 실패', '파일 업로드에 실패했습니다.');
+        return;
+      }
+
+      console.log('S3 업로드 성공!');
+
+      // 3. Complete API 호출
+      console.log('=== 파일 업로드 확정 시작 ===');
+      const completeResponse = await fetch(
+        `https://teamingkr.duckdns.org/api/files/complete/${id}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            key: intentData.key,
+          }),
+        }
+      );
+
+      console.log('Complete API 응답 상태:', completeResponse.status);
+
+      if (!completeResponse.ok) {
+        const errorText = await completeResponse.text();
+        console.error('Complete API 실패:', errorText);
+        Alert.alert('업로드 실패', '파일 업로드 확정에 실패했습니다.');
+        return;
+      }
+
+      const completeData = await completeResponse.json();
+      console.log('파일 업로드 완료:', completeData);
+
+      // 4. 파일 타입에 따라 WebSocket 메시지 타입 결정
+      const messageType = fileType === 'image' ? 'IMAGE' : 'FILE';
+
+      // 5. WebSocket으로 파일 메시지 전송 (fileId 배열로 전달)
+      if (messageType === 'IMAGE') {
+        sendImageSock(Number(id), fileName, [completeData.fileId], fileSize);
+      } else {
+        sendFileSock(Number(id), fileName, [completeData.fileId], fileSize);
+      }
+
+      Alert.alert(
+        '전송 완료',
+        `파일 "${fileName}"이 성공적으로 업로드되었습니다!`
+      );
+
+      // 스크롤을 맨 아래로
+      setTimeout(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+    } catch (error: any) {
+      console.error('❌ 파일 업로드 실패:', error);
+      Alert.alert(
+        '업로드 실패',
+        `파일 업로드 중 오류가 발생했습니다.\n${
+          error.message || '알 수 없는 오류'
+        }`
+      );
+    } finally {
+      setIsUploading(false);
+      setUploadProgress(null);
+    }
+  };
+
   const renderMessage = (message: Message, index: number) => {
-    const prevMessage = index > 0 ? messages[index - 1] : null;
+    const prevMessage = index > 0 ? displayMessages[index - 1] : null;
 
     // 카카오톡과 동일한 로직: 같은 사람 + 같은 시간대 = 연속 메시지
     const isSameUser = prevMessage
@@ -269,13 +818,46 @@ export default function ChatRoomScreen() {
           showTail={showTail}
           isContinuous={isContinuous}
           timestamp={message.timestamp}
-          readCount={message.readCount}
-          backgroundColor={message.isMe ? '#007AFF' : '#333333'}
+          attachments={message.attachments}
+          // readCount={message.readCount} // 주석 처리 (나중에 사용 예정)
+          backgroundColor={message.isMe ? '#007AFF' : '#121216'}
           textColor="#FFFFFF"
         />
       </View>
     );
   };
+
+  // 로딩 중일 때
+  if (isLoading) {
+    return (
+      <View style={styles.container}>
+        <StatusBar style="light" />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#4A90E2" />
+          <Text style={styles.loadingText}>채팅방에 연결하는 중...</Text>
+        </View>
+      </View>
+    );
+  }
+
+  // JWT가 없을 때
+  if (!jwt) {
+    return (
+      <View style={styles.container}>
+        <StatusBar style="light" />
+        <View style={styles.errorContainer}>
+          <Ionicons name="alert-circle" size={48} color="#FF6B6B" />
+          <Text style={styles.errorText}>인증 토큰을 찾을 수 없습니다.</Text>
+          <TouchableOpacity
+            style={styles.retryButton}
+            onPress={() => router.back()}
+          >
+            <Text style={styles.retryButtonText}>돌아가기</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -288,6 +870,21 @@ export default function ChatRoomScreen() {
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>{chatRoomData.title}</Text>
+          <View style={styles.connectionStatus}>
+            <View
+              style={[
+                styles.statusDot,
+                { backgroundColor: isConnected ? '#4CAF50' : '#FF6B6B' },
+              ]}
+            />
+            <Text style={styles.statusText}>
+              {isConnected
+                ? '연결됨'
+                : connectionStatus === 'connecting'
+                ? '연결 중...'
+                : '연결 끊김'}
+            </Text>
+          </View>
         </View>
         <TouchableOpacity onPress={handleMenuPress} style={styles.menuButton}>
           <Ionicons name="ellipsis-horizontal" size={24} color="#FFFFFF" />
@@ -306,7 +903,9 @@ export default function ChatRoomScreen() {
           contentContainerStyle={styles.messagesContent}
           showsVerticalScrollIndicator={false}
         >
-          {messages.map((message, index) => renderMessage(message, index))}
+          {displayMessages.map((message, index) =>
+            renderMessage(message, index)
+          )}
         </ScrollView>
 
         {/* 메시지 입력창 */}
@@ -362,6 +961,7 @@ export default function ChatRoomScreen() {
               <TouchableOpacity
                 style={styles.fileMenuOption}
                 onPress={handleImagePicker}
+                disabled={isUploading}
               >
                 <View style={styles.fileMenuIcon}>
                   <Ionicons name="image" size={24} color="#FF2D92" />
@@ -372,6 +972,7 @@ export default function ChatRoomScreen() {
               <TouchableOpacity
                 style={styles.fileMenuOption}
                 onPress={handleVideoPicker}
+                disabled={isUploading}
               >
                 <View style={styles.fileMenuIcon}>
                   <Ionicons name="videocam" size={24} color="#AF52DE" />
@@ -382,6 +983,7 @@ export default function ChatRoomScreen() {
               <TouchableOpacity
                 style={styles.fileMenuOption}
                 onPress={handleDocumentPicker}
+                disabled={isUploading}
               >
                 <View style={styles.fileMenuIcon}>
                   <Ionicons name="document" size={24} color="#007AFF" />
@@ -390,6 +992,31 @@ export default function ChatRoomScreen() {
               </TouchableOpacity>
             </View>
           </TouchableOpacity>
+        </Modal>
+
+        {/* 업로드 진행률 모달 */}
+        <Modal visible={isUploading} transparent={true} animationType="fade">
+          <View style={styles.uploadModalOverlay}>
+            <View style={styles.uploadModalContainer}>
+              <ActivityIndicator size="large" color="#007AFF" />
+              <Text style={styles.uploadModalTitle}>파일 업로드 중...</Text>
+              {uploadProgress && (
+                <View style={styles.progressContainer}>
+                  <View style={styles.progressBar}>
+                    <View
+                      style={[
+                        styles.progressFill,
+                        { width: `${uploadProgress.percentage}%` },
+                      ]}
+                    />
+                  </View>
+                  <Text style={styles.progressText}>
+                    {uploadProgress.percentage.toFixed(1)}%
+                  </Text>
+                </View>
+              )}
+            </View>
+          </View>
         </Modal>
       </KeyboardAvoidingView>
     </View>
@@ -407,6 +1034,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 60,
     paddingBottom: 16,
+    backgroundColor: '#000000', // 헤더 배경색을 검은색으로 설정
     borderBottomWidth: 1,
     borderBottomColor: '#292929',
   },
@@ -540,5 +1168,108 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '500',
     color: '#FFFFFF',
+  },
+
+  // 연결 상태
+  connectionStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 6,
+  },
+  statusText: {
+    fontSize: 12,
+    color: '#CCCCCC',
+  },
+
+  // 로딩 상태
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 60,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#CCCCCC',
+    marginTop: 16,
+  },
+
+  // 에러 상태
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 60,
+    paddingHorizontal: 40,
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#FF6B6B',
+    textAlign: 'center',
+    marginTop: 16,
+    marginBottom: 24,
+  },
+  retryButton: {
+    backgroundColor: '#4A90E2',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    fontSize: 16,
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+
+  // 업로드 진행률 모달
+  uploadModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  uploadModalContainer: {
+    backgroundColor: '#121216',
+    borderRadius: 16,
+    padding: 24,
+    alignItems: 'center',
+    minWidth: 200,
+    borderWidth: 1,
+    borderColor: '#292929',
+  },
+  uploadModalTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    marginTop: 16,
+    marginBottom: 20,
+  },
+  progressContainer: {
+    width: '100%',
+    alignItems: 'center',
+  },
+  progressBar: {
+    width: '100%',
+    height: 8,
+    backgroundColor: '#292929',
+    borderRadius: 4,
+    overflow: 'hidden',
+    marginBottom: 8,
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: '#007AFF',
+    borderRadius: 4,
+  },
+  progressText: {
+    fontSize: 14,
+    color: '#CCCCCC',
+    fontWeight: '500',
   },
 });

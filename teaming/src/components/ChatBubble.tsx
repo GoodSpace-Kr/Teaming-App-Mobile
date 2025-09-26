@@ -1,5 +1,13 @@
 import React from 'react';
 import { View, Text, StyleSheet, ViewStyle } from 'react-native';
+import FileChatBubble from './FileChatBubble';
+
+interface FileAttachment {
+  fileId: number;
+  fileName: string;
+  contentType: string;
+  size?: number;
+}
 
 interface ChatBubbleProps {
   text: string;
@@ -10,6 +18,7 @@ interface ChatBubbleProps {
   readCount?: number;
   backgroundColor?: string;
   textColor?: string;
+  attachments?: FileAttachment[];
 }
 
 export default function ChatBubble({
@@ -21,6 +30,7 @@ export default function ChatBubble({
   readCount,
   backgroundColor = '#333333',
   textColor = '#FFFFFF',
+  attachments,
 }: ChatBubbleProps) {
   const bubbleStyle: ViewStyle = {
     backgroundColor,
@@ -43,6 +53,22 @@ export default function ChatBubble({
     } else {
       bubbleStyle.borderTopLeftRadius = 0; // 좌측 상단 각지게
     }
+  }
+
+  // 파일 첨부가 있는 경우 FileChatBubble 사용
+  if (attachments && attachments.length > 0) {
+    return (
+      <FileChatBubble
+        attachments={attachments}
+        isMe={isMe}
+        showTail={showTail}
+        isContinuous={isContinuous}
+        timestamp={timestamp}
+        readCount={readCount}
+        backgroundColor={backgroundColor}
+        textColor={textColor}
+      />
+    );
   }
 
   return (

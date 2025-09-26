@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,10 +7,18 @@ import {
   TouchableOpacity,
   Dimensions,
   Image,
+  ActivityIndicator,
+  Alert,
+  TextInput,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { TaskService } from '@/src/services/taskService';
+import { Task, TaskWithMembers, TaskMember } from '@/src/types/task';
+import { getAccessToken } from '@/src/services/tokenManager';
+import { FileService } from '@/src/services/fileService';
+import * as DocumentPicker from 'expo-document-picker';
 
 const { width } = Dimensions.get('window');
 
@@ -41,97 +49,295 @@ interface TaskInfo {
 }
 
 export default function ViewTaskScreen() {
-  const { id } = useLocalSearchParams<{ id?: string }>();
+  const { id, roomId } = useLocalSearchParams<{
+    id?: string;
+    roomId?: string;
+  }>();
+  const [taskInfo, setTaskInfo] = useState<TaskWithMembers | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [currentUserId, setCurrentUserId] = useState<number | null>(null);
+  const [submissionText, setSubmissionText] = useState('');
+  const [uploadedFiles, setUploadedFiles] = useState<
+    DocumentPicker.DocumentPickerResult[]
+  >([]);
+  const [mySubmissionData, setMySubmissionData] = useState<{
+    content: string;
+    submittedAt: string;
+  } | null>(null);
 
-  // 목데이터 - 실제 API 연동 시 대체
-  const [tasks] = useState<TaskInfo[]>([
-    {
-      id: 1,
-      title: '자료조사 2명 과제부여',
-      description:
-        '자료조사를 하겠다고 한 2명에게 과제를 부여합니다.\n제한시간에 맞춰서 과제 제출해주시면 감사하겠습니다.',
-      deadline: '2025년 9월 7일 07:00',
-      assignedMembers: [
-        {
-          id: 1,
-          name: '권민석',
-          avatar: require('../../../assets/images/(chattingRoom)/me.png'),
-          hasSubmitted: true,
-          submittedAt: '2025년 09월 06일 16:45',
-          submissionText:
-            '정치학 관련 자료를 수집했습니다. 주요 내용은 다음과 같습니다...',
-          submittedFiles: [
-            {
-              id: '1',
-              name: '정치학_자료조사.pdf',
-              size: 2048576,
-              type: 'application/pdf',
-            },
-            {
-              id: '2',
-              name: '참고문헌.docx',
-              size: 1024000,
-              type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-            },
-          ],
-        },
-        {
-          id: 2,
-          name: '정치학존잘남',
-          avatar: require('../../../assets/images/(chattingRoom)/politicMan.png'),
-          hasSubmitted: false,
-        },
-      ],
-      status: 'pending',
-      createdBy: '최순조(팀장)',
-      createdAt: '2025년 9월 6일 15:30',
-    },
-    {
-      id: 2,
-      title: '발표 자료 준비',
-      description: '다음 주 발표를 위한 PPT 자료를 준비해주세요.',
-      deadline: '2025년 9월 10일 18:00',
-      assignedMembers: [
-        {
-          id: 1,
-          name: '권민석',
-          avatar: require('../../../assets/images/(chattingRoom)/me.png'),
-          hasSubmitted: false,
-        },
-        {
-          id: 3,
-          name: '팀플하기싫다',
-          avatar: require('../../../assets/images/(chattingRoom)/noTeample.png'),
-          hasSubmitted: true,
-          submittedAt: '2025년 09월 08일 14:20',
-          submissionText: '발표 자료를 준비했습니다. 주요 내용은...',
-          submittedFiles: [
-            {
-              id: '1',
-              name: '발표자료.pptx',
-              size: 5120000,
-              type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-            },
-          ],
-        },
-      ],
-      status: 'pending',
-      createdBy: '최순조(팀장)',
-      createdAt: '2025년 9월 7일 09:15',
-    },
+  // 멤버 정보 매핑 (실제로는 API에서 가져와야 함)
+  const memberMap = new Map<number, TaskMember>([
+    [1, { id: 1, name: '권민석', hasSubmitted: false }],
+    [2, { id: 2, name: '정치학존잘남', hasSubmitted: false }],
+    [3, { id: 3, name: '팀플하기싫다', hasSubmitted: false }],
+    [4, { id: 4, name: '최순조(팀장)', hasSubmitted: false }],
   ]);
 
-  // URL 파라미터로 받은 ID에 해당하는 과제 찾기
-  const taskInfo =
-    tasks.find((task) => task.id === parseInt(id || '1')) || tasks[0];
+  // JWT 토큰에서 사용자 ID 추출하는 함수
+  const getUserIdFromToken = (token: string): number | null => {
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      return payload.sub ? parseInt(payload.sub) : null;
+    } catch (error) {
+      console.error('토큰에서 사용자 ID 추출 실패:', error);
+      return null;
+    }
+  };
+
+  const loadCurrentUserInfo = async () => {
+    try {
+      // JWT 토큰에서 사용자 ID 추출
+      const token = await getAccessToken();
+      if (token) {
+        const userId = getUserIdFromToken(token);
+        setCurrentUserId(userId);
+        console.log('👤 현재 사용자 ID:', userId);
+      } else {
+        console.error('❌ JWT 토큰을 찾을 수 없습니다');
+        // 기본값으로 1 설정 (권민석)
+        setCurrentUserId(1);
+      }
+    } catch (error) {
+      console.error('❌ 현재 사용자 정보 로드 실패:', error);
+      // 기본값으로 1 설정 (권민석)
+      setCurrentUserId(1);
+    }
+  };
+
+  // 현재 사용자 정보 로드
+  useEffect(() => {
+    loadCurrentUserInfo();
+  }, []);
+
+  // 과제 상세 정보 로드
+  useEffect(() => {
+    if (currentUserId !== null) {
+      loadTaskDetail();
+    }
+  }, [id, roomId, currentUserId]);
+
+  const loadTaskDetail = async () => {
+    if (!id || !roomId) return;
+
+    try {
+      setIsLoading(true);
+      console.log('🚀 과제 상세 정보 로드:', { taskId: id, roomId });
+
+      // 토큰 상태 확인
+      const token = await getAccessToken();
+      console.log('🔑 현재 토큰 상태:', token ? '토큰 있음' : '토큰 없음');
+      if (token) {
+        console.log('🔑 토큰 길이:', token.length);
+        console.log('🔑 토큰 앞 20자:', token.substring(0, 20) + '...');
+      }
+
+      // 1. 먼저 과제 목록을 가져와서 해당 과제 찾기
+      const tasks = await TaskService.getTasks(Number(roomId));
+      const targetTask = tasks.find((task) => task.assignmentId === Number(id));
+
+      if (targetTask) {
+        // 백엔드 Task를 UI용 TaskWithMembers로 변환
+        const transformedTask = TaskService.transformTaskForUI(
+          targetTask,
+          memberMap
+        );
+        setTaskInfo(transformedTask);
+        console.log('✅ 과제 상세 정보 로드 성공:', transformedTask);
+      } else {
+        console.error('❌ 과제를 찾을 수 없습니다:', id);
+        Alert.alert('오류', '과제 정보를 찾을 수 없습니다.');
+        router.back();
+      }
+    } catch (error: any) {
+      console.error('❌ 과제 상세 정보 로드 실패:', error);
+      Alert.alert('로드 실패', '과제 정보를 불러오는 중 오류가 발생했습니다.');
+      router.back();
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleBackPress = () => {
     router.back();
   };
 
-  const handleSubmitTask = () => {
-    // 과제 제출 화면으로 이동
-    router.push('/(tabs)/chats/submit-task');
+  // 본인이 할당된 과제인지 확인
+  const isAssignedToMe = () => {
+    if (!currentUserId || !taskInfo) return false;
+    return taskInfo.assignedMemberIds.includes(currentUserId);
+  };
+
+  // 본인의 제출 상태 확인
+  const getMySubmissionStatus = () => {
+    if (!currentUserId || !taskInfo) return false;
+    const myMember = taskInfo.assignedMembers.find(
+      (member) => member.id === currentUserId
+    );
+    return myMember ? myMember.hasSubmitted : false;
+  };
+
+  // 파일 업로드
+  const handleFileUpload = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: '*/*',
+        copyToCacheDirectory: true,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        setUploadedFiles((prev) => [...prev, result]);
+      }
+    } catch (error) {
+      Alert.alert('오류', '파일 업로드 중 오류가 발생했습니다.');
+    }
+  };
+
+  // 파일 제거
+  const handleFileRemove = (index: number) => {
+    setUploadedFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  // 과제 제출
+  const handleSubmitTask = async () => {
+    if (submissionText.trim() === '' && uploadedFiles.length === 0) {
+      Alert.alert('알림', '제출 내용이나 파일을 추가해주세요.');
+      return;
+    }
+
+    if (!taskInfo) {
+      Alert.alert('오류', '과제 정보를 찾을 수 없습니다.');
+      return;
+    }
+
+    Alert.alert('과제 제출', '과제를 제출하시겠습니까?', [
+      { text: '취소', style: 'cancel' },
+      {
+        text: '제출',
+        onPress: async () => {
+          try {
+            console.log('🚀 과제 제출:', {
+              taskId: taskInfo.assignmentId,
+              content: submissionText,
+              files: uploadedFiles,
+            });
+
+            // 파일 업로드 처리
+            const fileIds: number[] = [];
+
+            if (uploadedFiles.length > 0) {
+              console.log('📁 파일 업로드 시작:', uploadedFiles.length, '개');
+
+              for (let i = 0; i < uploadedFiles.length; i++) {
+                const fileResult = uploadedFiles[i];
+                if (
+                  fileResult.canceled ||
+                  !fileResult.assets ||
+                  fileResult.assets.length === 0
+                ) {
+                  continue;
+                }
+
+                const file = fileResult.assets[0];
+                try {
+                  // 파일 업로드 의도 등록
+                  const uploadIntent = await FileService.getUploadIntent(
+                    Number(roomId),
+                    {
+                      fileName: file.name || 'Unknown File',
+                      size: file.size || 0,
+                      contentType: file.mimeType || 'application/octet-stream',
+                    }
+                  );
+
+                  // S3에 파일 업로드
+                  const uploadSuccess = await FileService.uploadToS3(
+                    uploadIntent.url,
+                    file.uri,
+                    file.mimeType || 'application/octet-stream',
+                    (progress) => {
+                      console.log(
+                        `📤 ${file.name} 업로드 진행률: ${progress}%`
+                      );
+                    }
+                  );
+
+                  if (uploadSuccess) {
+                    // 업로드 완료 등록
+                    const completeResponse = await FileService.completeUpload(
+                      Number(roomId),
+                      uploadIntent.key
+                    );
+
+                    fileIds.push(completeResponse.fileId);
+                    console.log(
+                      `✅ ${file.name} 업로드 완료, fileId: ${completeResponse.fileId}`
+                    );
+                  } else {
+                    console.error(`❌ ${file.name} 업로드 실패`);
+                  }
+                } catch (error) {
+                  console.error(`❌ ${file.name} 업로드 중 오류:`, error);
+                }
+              }
+            }
+
+            await TaskService.submitTask(Number(roomId), {
+              taskId: taskInfo.assignmentId,
+              content: submissionText,
+              fileIds: fileIds,
+            });
+
+            console.log('✅ 과제 제출 성공');
+
+            // 제출 후 즉시 상태 업데이트
+            const submittedAt = new Date().toISOString();
+            if (taskInfo && currentUserId) {
+              setTaskInfo((prev) => {
+                if (!prev) return prev;
+                return {
+                  ...prev,
+                  assignedMembers: prev.assignedMembers.map((member) =>
+                    member.id === currentUserId
+                      ? {
+                          ...member,
+                          hasSubmitted: true,
+                          submittedAt: submittedAt,
+                        }
+                      : member
+                  ),
+                };
+              });
+            }
+
+            // 제출 데이터 저장
+            setMySubmissionData({
+              content: submissionText,
+              submittedAt: submittedAt,
+            });
+
+            // 제출 폼 초기화
+            setSubmissionText('');
+            setUploadedFiles([]);
+
+            Alert.alert('완료', '과제가 성공적으로 제출되었습니다.', [
+              {
+                text: '확인',
+                onPress: () => {
+                  // 과제 정보 다시 로드 (서버에서 최신 데이터 가져오기)
+                  loadTaskDetail();
+
+                  // 자동으로 뒤로가기
+                  router.back();
+                },
+              },
+            ]);
+          } catch (error: any) {
+            console.error('❌ 과제 제출 실패:', error);
+            Alert.alert('제출 실패', '과제 제출 중 오류가 발생했습니다.');
+          }
+        },
+      },
+    ]);
   };
 
   const formatFileSize = (bytes: number) => {
@@ -142,7 +348,7 @@ export default function ViewTaskScreen() {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
-  const getSubmissionStatus = (member: AssignedMember) => {
+  const getSubmissionStatus = (member: TaskMember) => {
     if (member.hasSubmitted) {
       return { text: '제출완료', color: '#4CAF50' };
     } else {
@@ -152,10 +358,12 @@ export default function ViewTaskScreen() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'submitted':
+      case 'COMPLETED':
         return '#4CAF50';
-      case 'pending':
+      case 'IN_PROGRESS':
         return '#FF9500';
+      case 'CANCELLED':
+        return '#FF3B30';
       default:
         return '#666666';
     }
@@ -163,14 +371,53 @@ export default function ViewTaskScreen() {
 
   const getStatusText = (status: string) => {
     switch (status) {
-      case 'submitted':
-        return '제출완료';
-      case 'pending':
-        return '미제출';
+      case 'COMPLETED':
+        return '완료';
+      case 'IN_PROGRESS':
+        return '진행중';
+      case 'CANCELLED':
+        return '취소됨';
       default:
         return '알 수 없음';
     }
   };
+
+  if (isLoading) {
+    return (
+      <View style={styles.container}>
+        <StatusBar style="light" />
+        <View style={styles.header}>
+          <TouchableOpacity onPress={handleBackPress} style={styles.backButton}>
+            <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>과제 확인</Text>
+          <View style={styles.headerRight} />
+        </View>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#007AFF" />
+          <Text style={styles.loadingText}>과제 정보를 불러오는 중...</Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (!taskInfo) {
+    return (
+      <View style={styles.container}>
+        <StatusBar style="light" />
+        <View style={styles.header}>
+          <TouchableOpacity onPress={handleBackPress} style={styles.backButton}>
+            <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>과제 확인</Text>
+          <View style={styles.headerRight} />
+        </View>
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>과제 정보를 찾을 수 없습니다.</Text>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -195,7 +442,9 @@ export default function ViewTaskScreen() {
             <View style={styles.taskMeta}>
               <View style={styles.metaItem}>
                 <Ionicons name="calendar" size={16} color="#007AFF" />
-                <Text style={styles.metaText}>마감: {taskInfo.deadline}</Text>
+                <Text style={styles.metaText}>
+                  마감: {TaskService.formatDateFromISO(taskInfo.due)}
+                </Text>
               </View>
               <View style={styles.metaItem}>
                 <Ionicons name="people" size={16} color="#007AFF" />
@@ -228,7 +477,7 @@ export default function ViewTaskScreen() {
               <View style={styles.metaItem}>
                 <Ionicons name="time-outline" size={16} color="#666666" />
                 <Text style={styles.metaText}>
-                  생성일: {taskInfo.createdAt}
+                  생성일: {TaskService.formatDateFromISO(taskInfo.createdAt)}
                 </Text>
               </View>
             </View>
@@ -241,11 +490,15 @@ export default function ViewTaskScreen() {
           <View style={styles.submissionsContainer}>
             {taskInfo.assignedMembers.map((member) => {
               const status = getSubmissionStatus(member);
+              const isMe = currentUserId === member.id;
+
               return (
                 <View key={member.id} style={styles.memberCard}>
                   <View style={styles.memberInfo}>
                     <View style={styles.memberDetails}>
-                      <Text style={styles.memberName}>{member.name}</Text>
+                      <Text style={styles.memberName}>
+                        {member.name} {isMe && '(나)'}
+                      </Text>
                       <View style={styles.statusContainer}>
                         <View
                           style={[
@@ -260,7 +513,8 @@ export default function ViewTaskScreen() {
                         </Text>
                         {member.hasSubmitted && member.submittedAt && (
                           <Text style={styles.submittedAt}>
-                            ({member.submittedAt})
+                            ({TaskService.formatDateFromISO(member.submittedAt)}
+                            )
                           </Text>
                         )}
                       </View>
@@ -269,38 +523,107 @@ export default function ViewTaskScreen() {
 
                   {member.hasSubmitted && (
                     <View style={styles.submissionDetails}>
-                      {member.submissionText && (
-                        <View style={styles.submissionTextContainer}>
-                          <Text style={styles.submissionTextLabel}>
-                            제출 내용:
-                          </Text>
-                          <Text style={styles.submissionText}>
-                            {member.submissionText}
-                          </Text>
-                        </View>
-                      )}
+                      <View style={styles.submissionTextContainer}>
+                        <Text style={styles.submissionTextLabel}>
+                          제출 내용:
+                        </Text>
+                        <Text style={styles.submissionText}>
+                          {isMe && mySubmissionData
+                            ? mySubmissionData.content ||
+                              '과제가 제출되었습니다.'
+                            : '과제가 제출되었습니다.'}
+                        </Text>
+                      </View>
+                    </View>
+                  )}
 
-                      {member.submittedFiles &&
-                        member.submittedFiles.length > 0 && (
-                          <View style={styles.submittedFilesContainer}>
-                            <Text style={styles.submittedFilesLabel}>
-                              첨부 파일:
-                            </Text>
-                            {member.submittedFiles.map((file) => (
-                              <View key={file.id} style={styles.fileItem}>
-                                <Ionicons
-                                  name="document"
-                                  size={16}
-                                  color="#CCCCCC"
-                                />
-                                <Text style={styles.fileName}>{file.name}</Text>
-                                <Text style={styles.fileSize}>
-                                  ({formatFileSize(file.size)})
-                                </Text>
-                              </View>
-                            ))}
+                  {/* 본인에게 할당된 과제이고 아직 제출하지 않은 경우 제출 폼 표시 */}
+                  {isMe && !member.hasSubmitted && (
+                    <View style={styles.submissionForm}>
+                      <Text style={styles.submissionFormTitle}>과제 제출</Text>
+
+                      {/* 제출 내용 입력 */}
+                      <View style={styles.inputContainer}>
+                        <Text style={styles.inputLabel}>제출 내용</Text>
+                        <TextInput
+                          style={styles.textInput}
+                          value={submissionText}
+                          onChangeText={setSubmissionText}
+                          placeholder="과제 제출 내용을 입력하세요..."
+                          placeholderTextColor="#666666"
+                          multiline
+                          numberOfLines={4}
+                        />
+                      </View>
+
+                      {/* 파일 첨부 */}
+                      <View style={styles.inputContainer}>
+                        <Text style={styles.inputLabel}>파일 첨부</Text>
+                        <TouchableOpacity
+                          style={styles.uploadButton}
+                          onPress={handleFileUpload}
+                        >
+                          <Ionicons
+                            name="cloud-upload"
+                            size={20}
+                            color="#007AFF"
+                          />
+                          <Text style={styles.uploadButtonText}>파일 선택</Text>
+                        </TouchableOpacity>
+
+                        {/* 업로드된 파일 목록 */}
+                        {uploadedFiles.length > 0 && (
+                          <View style={styles.fileList}>
+                            {uploadedFiles.map((fileResult, index) => {
+                              if (
+                                fileResult.canceled ||
+                                !fileResult.assets ||
+                                fileResult.assets.length === 0
+                              ) {
+                                return null;
+                              }
+                              const file = fileResult.assets[0];
+                              return (
+                                <View key={index} style={styles.fileItem}>
+                                  <View style={styles.fileInfo}>
+                                    <Ionicons
+                                      name="document"
+                                      size={16}
+                                      color="#007AFF"
+                                    />
+                                    <View style={styles.fileDetails}>
+                                      <Text style={styles.fileName}>
+                                        {file.name || 'Unknown File'}
+                                      </Text>
+                                      <Text style={styles.fileSize}>
+                                        {formatFileSize(file.size || 0)}
+                                      </Text>
+                                    </View>
+                                  </View>
+                                  <TouchableOpacity
+                                    style={styles.removeButton}
+                                    onPress={() => handleFileRemove(index)}
+                                  >
+                                    <Ionicons
+                                      name="close"
+                                      size={14}
+                                      color="#FF3B30"
+                                    />
+                                  </TouchableOpacity>
+                                </View>
+                              );
+                            })}
                           </View>
                         )}
+                      </View>
+
+                      {/* 제출 버튼 */}
+                      <TouchableOpacity
+                        style={styles.submitButton}
+                        onPress={handleSubmitTask}
+                      >
+                        <Text style={styles.submitButtonText}>과제 제출</Text>
+                      </TouchableOpacity>
                     </View>
                   )}
                 </View>
@@ -411,20 +734,6 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingBottom: 34,
   },
-  submitButton: {
-    backgroundColor: '#007AFF',
-    borderRadius: 12,
-    paddingVertical: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  submitButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
   submissionsContainer: {
     gap: 12,
   },
@@ -502,21 +811,114 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     marginBottom: 4,
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 60,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#CCCCCC',
+    marginTop: 16,
+  },
+  submissionForm: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#292929',
+  },
+  submissionFormTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#007AFF',
+    marginBottom: 16,
+  },
+  inputContainer: {
+    marginBottom: 16,
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    marginBottom: 8,
+  },
+  textInput: {
+    backgroundColor: '#1A1A1A',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#292929',
+    textAlignVertical: 'top',
+  },
+  uploadButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#121216',
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: '#007AFF',
+    borderStyle: 'dashed',
+  },
+  uploadButtonText: {
+    fontSize: 14,
+    color: '#007AFF',
+    marginLeft: 8,
+    fontWeight: '500',
+  },
+  fileList: {
+    marginTop: 8,
+    gap: 6,
+  },
   fileItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    padding: 8,
-    backgroundColor: '#1A1A1A',
+    justifyContent: 'space-between',
+    backgroundColor: '#121216',
     borderRadius: 6,
+    padding: 8,
+    borderWidth: 1,
+    borderColor: '#292929',
+  },
+  fileInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  fileDetails: {
+    marginLeft: 8,
+    flex: 1,
   },
   fileName: {
-    flex: 1,
-    fontSize: 14,
+    fontSize: 12,
     color: '#FFFFFF',
+    fontWeight: '500',
   },
   fileSize: {
-    fontSize: 12,
+    fontSize: 10,
     color: '#888888',
+    marginTop: 2,
+  },
+  removeButton: {
+    padding: 4,
+  },
+  submitButton: {
+    backgroundColor: '#007AFF',
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+  },
+  submitButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
 });

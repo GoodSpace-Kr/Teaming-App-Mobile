@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,11 +9,21 @@ import {
   Image,
   Dimensions,
   Alert,
+  ActivityIndicator,
+  Modal,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import TeamInviteModal from '../../../src/components/TeamInviteModal';
+import {
+  createTeam,
+  CreateTeamRequest,
+} from '../../../src/services/teamService';
+import { AvatarService } from '../../../src/services/avatarService';
+import * as FileSystem from 'expo-file-system';
+import * as Crypto from 'expo-crypto';
 
 const { width } = Dimensions.get('window');
 
@@ -21,25 +31,109 @@ export default function CreateTeamScreen() {
   const [roomTitle, setRoomTitle] = useState('');
   const [subtitle, setSubtitle] = useState('');
   const [teamCount, setTeamCount] = useState(3);
-  const [selectedRoom, setSelectedRoom] = useState('basic');
+  const [selectedRoom, setSelectedRoom] = useState('demo');
   const [emails, setEmails] = useState(['', '', '']);
   const [roomImage, setRoomImage] = useState<string | null>(null);
+  const [roomImageKey, setRoomImageKey] = useState<string | null>(null);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+
+  // 초대 모달 상태
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [createdTeamName, setCreatedTeamName] = useState('');
+  const [inviteCode, setInviteCode] = useState('');
+  const [roomId, setRoomId] = useState<number | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
+
+  // 탭 전환 감지 및 처리
+  useFocusEffect(
+    useCallback(() => {
+      // 이 화면이 포커스될 때마다 실행
+      console.log('팀 생성 화면 포커스');
+    }, [])
+  );
 
   const handleBackPress = () => {
     router.back();
   };
 
-  const handleCreateRoom = () => {
+  const handleCreateRoom = async () => {
     console.log('티밍룸 생성하기 버튼 클릭');
-    // Modal 닫기
-    router.dismiss();
-    // 약간의 지연 후 채팅방 목록을 거쳐서 채팅방으로 이동 (팀장으로)
-    setTimeout(() => {
-      router.push('/(tabs)/chats');
-      setTimeout(() => {
-        router.push('/(tabs)/chats/chat-room/1?isLeader=true');
-      }, 100);
-    }, 100);
+
+    // 입력 검증
+    if (!roomTitle.trim()) {
+      Alert.alert('오류', '팀 이름을 입력해주세요.');
+      return;
+    }
+
+    if (!subtitle.trim()) {
+      Alert.alert('오류', '팀 설명을 입력해주세요.');
+      return;
+    }
+
+    // 팀 생성 요청 데이터 준비
+    const teamData: CreateTeamRequest = {
+      title: roomTitle.trim(),
+      description: subtitle.trim(),
+      memberCount: teamCount,
+      roomType: selectedRoom.toUpperCase() as
+        | 'DEMO'
+        | 'BASIC'
+        | 'STANDARD'
+        | 'ELITE',
+      // 이미지가 있으면 S3 업로드된 imageKey 사용, 없으면 undefined
+      imageKey: roomImageKey || undefined,
+      imageVersion: roomImageKey ? 1 : undefined,
+    };
+
+    console.log('📤 팀 생성 요청 데이터:', teamData);
+
+    // 모든 경우에 먼저 팀 생성
+    try {
+      setIsCreating(true);
+
+      console.log('🚀 팀 생성 시작');
+      const createdTeam = await createTeam(teamData);
+      console.log('✅ 팀 생성 완료:', createdTeam);
+
+      // 모든 경우에 초대 모달 표시 (결제는 채팅방 목록에서 처리)
+      console.log('🎉 팀 생성 완료 - 초대 모달 표시');
+
+      // 서버에서 받은 초대 코드와 roomId 저장
+      setCreatedTeamName(roomTitle);
+      setInviteCode(createdTeam.inviteCode);
+
+      if (createdTeam.roomId) {
+        setRoomId(createdTeam.roomId);
+        console.log('🏠 생성된 방 ID:', createdTeam.roomId);
+      } else {
+        console.log('⚠️ roomId가 응답에 없습니다');
+      }
+
+      // 초대 모달 표시
+      setShowInviteModal(true);
+      setIsCreating(false);
+    } catch (error) {
+      console.error('❌ 팀 생성 실패:', error);
+      Alert.alert('오류', '팀 생성에 실패했습니다. 다시 시도해주세요.');
+      setIsCreating(false);
+    }
+  };
+
+  // 초대 모달 닫기만 하는 핸들러
+  const handleInviteClose = () => {
+    setShowInviteModal(false);
+  };
+
+  // 초대 모달의 "채팅방 목록으로 이동" 눌렀을 때
+  const handleEnterRoom = async () => {
+    // 1) 모달 닫기
+    setShowInviteModal(false);
+
+    // 2) 한 틱 대기해서 Modal의 visible=false가 반영되도록 함
+    await new Promise((r) => setTimeout(r, 50));
+
+    // 3) 채팅방 목록으로 이동
+    router.push('/(tabs)/chats');
   };
 
   const handleSendInvite = (index: number) => {
@@ -63,15 +157,43 @@ export default function CreateTeamScreen() {
       });
 
       if (!result.canceled && result.assets.length > 0) {
-        setRoomImage(result.assets[0].uri);
+        const asset = result.assets[0];
+        setRoomImage(asset.uri);
+
+        // S3 업로드 시작
+        setIsUploadingImage(true);
+
+        try {
+          console.log('🚀 채팅방 이미지 S3 업로드 시작');
+          const uploadResult = await AvatarService.uploadAvatar(
+            asset.uri,
+            'ROOM'
+          );
+
+          console.log('✅ 채팅방 이미지 업로드 성공:', uploadResult);
+          setRoomImageKey(uploadResult.avatarKey);
+
+          Alert.alert('성공', '채팅방 이미지가 업로드되었습니다!');
+        } catch (uploadError) {
+          console.error('❌ 채팅방 이미지 업로드 실패:', uploadError);
+          Alert.alert(
+            '업로드 실패',
+            '이미지 업로드에 실패했습니다. 다시 시도해주세요.'
+          );
+          setRoomImage(null);
+        } finally {
+          setIsUploadingImage(false);
+        }
       }
     } catch (error) {
+      console.error('이미지 선택 오류:', error);
       Alert.alert('오류', '이미지를 선택하는 중 오류가 발생했습니다.');
     }
   };
 
   const handleRemoveRoomImage = () => {
     setRoomImage(null);
+    setRoomImageKey(null);
   };
 
   // 팀원수에 맞춰 이메일 배열 조정
@@ -87,6 +209,14 @@ export default function CreateTeamScreen() {
   }, [teamCount]);
 
   const roomTypes = [
+    {
+      id: 'demo',
+      name: 'Demo Room',
+      price: '0',
+      benefit: '무료로 서비스를 이용해 보십시오.',
+      logo: require('../../../assets/images/logo.png'),
+      color: '#FFFFFF',
+    },
     {
       id: 'basic',
       name: 'Basic Room',
@@ -145,8 +275,14 @@ export default function CreateTeamScreen() {
           <TouchableOpacity
             style={styles.imageContainer}
             onPress={handleSelectRoomImage}
+            disabled={isUploadingImage}
           >
-            {roomImage ? (
+            {isUploadingImage ? (
+              <View style={styles.imagePlaceholder}>
+                <ActivityIndicator size="large" color="#4A90E2" />
+                <Text style={styles.placeholderText}>업로드 중...</Text>
+              </View>
+            ) : roomImage ? (
               <Image source={{ uri: roomImage }} style={styles.roomImage} />
             ) : (
               <View style={styles.imagePlaceholder}>
@@ -211,7 +347,9 @@ export default function CreateTeamScreen() {
               <TouchableOpacity
                 key={room.id}
                 style={[
-                  room.id === 'elite'
+                  room.id === 'demo'
+                    ? styles.demoRoomCard
+                    : room.id === 'elite'
                     ? styles.eliteRoomCard
                     : room.id === 'standard'
                     ? styles.standardRoomCard
@@ -225,6 +363,7 @@ export default function CreateTeamScreen() {
                     <Text
                       style={[
                         styles.roomName,
+                        room.id === 'demo' && styles.demoRoomName,
                         room.id === 'elite' && styles.eliteRoomName,
                         room.id === 'standard' && styles.standardRoomName,
                       ]}
@@ -261,38 +400,39 @@ export default function CreateTeamScreen() {
             </View>
           </View>
         </View>
-
-        {/* 팀원 초대하기 */}
-        <View style={styles.inputSection}>
-          <Text style={styles.inputLabel}>팀원 초대하기</Text>
-          {emails.slice(0, teamCount).map((email, index) => (
-            <View key={index} style={styles.emailContainer}>
-              <TextInput
-                style={styles.emailInput}
-                value={email}
-                onChangeText={(text) => handleEmailChange(index, text)}
-                placeholder="팀원의 이메일을 입력해주세요"
-                placeholderTextColor="#666666"
-                keyboardType="email-address"
-              />
-              <TouchableOpacity
-                style={styles.inviteButton}
-                onPress={() => handleSendInvite(index)}
-              >
-                <Text style={styles.inviteButtonText}>초대코드 발송</Text>
-              </TouchableOpacity>
-            </View>
-          ))}
-        </View>
-
         {/* 티밍룸 생성하기 버튼 */}
         <TouchableOpacity
-          style={styles.createButton}
+          style={[
+            styles.createButton,
+            isCreating && styles.createButtonDisabled,
+          ]}
           onPress={handleCreateRoom}
+          disabled={isCreating}
         >
-          <Text style={styles.createButtonText}>티밍룸 생성하기</Text>
+          {isCreating ? (
+            <>
+              <ActivityIndicator
+                size="small"
+                color="#FFFFFF"
+                style={{ marginRight: 8 }}
+              />
+              <Text style={styles.createButtonText}>생성 중...</Text>
+            </>
+          ) : (
+            <Text style={styles.createButtonText}>티밍룸 생성하기</Text>
+          )}
         </TouchableOpacity>
       </ScrollView>
+
+      {/* 팀 초대 모달 */}
+      <TeamInviteModal
+        visible={showInviteModal}
+        onClose={handleInviteClose} // ✅ 닫기만
+        onEnterRoom={handleEnterRoom} // ✅ 닫고 전환은 여기서만
+        teamName={createdTeamName}
+        inviteCode={inviteCode}
+        roomId={roomId}
+      />
     </View>
   );
 }
@@ -379,6 +519,17 @@ const styles = StyleSheet.create({
     borderColor: '#292929',
     padding: 16,
   },
+  demoRoomCard: {
+    backgroundColor: '#121216',
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 16,
+    shadowColor: '#4A90E2',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
   eliteRoomCard: {
     backgroundColor: '#121216',
     borderRadius: 16,
@@ -402,6 +553,15 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.5,
     shadowRadius: 10,
     elevation: 8,
+  },
+  demoRoomName: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#4A90E2', // 파란색
+    marginBottom: 6,
+    textShadowColor: '#4A90E2',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 8,
   },
   eliteRoomName: {
     fontSize: 18,
@@ -535,6 +695,12 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.5,
     shadowRadius: 10,
     elevation: 8,
+    flexDirection: 'row',
+    justifyContent: 'center',
+  },
+  createButtonDisabled: {
+    backgroundColor: '#666666',
+    shadowOpacity: 0.2,
   },
   createButtonText: {
     fontSize: 18,

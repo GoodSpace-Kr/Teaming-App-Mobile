@@ -6,15 +6,19 @@ import {
   TouchableOpacity,
   TextInput,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { updatePassword } from '../../../src/services/api';
+import { getLoginType } from '../../../src/services/tokenManager';
 
 export default function ChangePasswordScreen() {
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [isUpdating, setIsUpdating] = useState(false);
 
   const handleBackPress = () => {
     router.back();
@@ -24,7 +28,52 @@ export default function ChangePasswordScreen() {
     router.back();
   };
 
-  const handleSubmit = () => {
+  // 비밀번호 유효성 검사 함수
+  const validatePassword = (
+    password: string
+  ): { isValid: boolean; message?: string } => {
+    if (password.length < 8) {
+      return { isValid: false, message: '비밀번호는 8자 이상이어야 합니다.' };
+    }
+
+    // 영문, 숫자, 특수문자 포함 검사
+    const hasLetter = /[a-zA-Z]/.test(password);
+    const hasNumber = /\d/.test(password);
+    const hasSpecial = /[!@#$%^&*(),.?":{}|<>]/.test(password);
+
+    if (!hasLetter || !hasNumber || !hasSpecial) {
+      return {
+        isValid: false,
+        message: '영문, 숫자, 특수문자를 모두 포함해야 합니다.',
+      };
+    }
+
+    // 연속 문자 검사 (3자 이상 연속)
+    const hasConsecutive = /(.)\1{2,}/.test(password);
+    if (hasConsecutive) {
+      return { isValid: false, message: '연속된 문자는 사용할 수 없습니다.' };
+    }
+
+    return { isValid: true };
+  };
+
+  const handleSubmit = async () => {
+    // 로그인 타입 확인 (디버깅용)
+    try {
+      const loginType = await getLoginType();
+      console.log('🔍 현재 로그인 타입:', loginType);
+
+      if (loginType !== 'email') {
+        Alert.alert(
+          '오류',
+          '이메일 로그인 사용자만 비밀번호를 변경할 수 있습니다.'
+        );
+        return;
+      }
+    } catch (error) {
+      console.error('로그인 타입 확인 실패:', error);
+    }
+
     // 유효성 검사
     if (!currentPassword.trim()) {
       Alert.alert('오류', '현재 비밀번호를 입력해주세요.');
@@ -36,20 +85,67 @@ export default function ChangePasswordScreen() {
       return;
     }
 
+    if (!confirmPassword.trim()) {
+      Alert.alert('오류', '새 비밀번호 확인을 입력해주세요.');
+      return;
+    }
+
     if (newPassword !== confirmPassword) {
       Alert.alert('오류', '새 비밀번호가 일치하지 않습니다.');
       return;
     }
 
-    // 비밀번호 규칙 검사
-    if (newPassword.length < 8) {
-      Alert.alert('오류', '비밀번호는 8자 이상이어야 합니다.');
+    // 현재 비밀번호와 새 비밀번호가 같은지 확인
+    if (currentPassword === newPassword) {
+      Alert.alert('오류', '현재 비밀번호와 새 비밀번호가 같습니다.');
       return;
     }
 
-    // TODO: 비밀번호 변경 API 호출
-    Alert.alert('완료', '비밀번호가 성공적으로 변경되었습니다.');
-    router.back();
+    // 비밀번호 규칙 검사
+    const passwordValidation = validatePassword(newPassword);
+    if (!passwordValidation.isValid) {
+      Alert.alert('오류', passwordValidation.message);
+      return;
+    }
+
+    try {
+      setIsUpdating(true);
+
+      console.log('🔐 비밀번호 변경 시도');
+      console.log('현재 비밀번호 길이:', currentPassword.length);
+      console.log('새 비밀번호 길이:', newPassword.length);
+
+      await updatePassword({
+        currentPassword: currentPassword.trim(),
+        newPassword: newPassword.trim(),
+      });
+
+      console.log('✅ 비밀번호 변경 성공');
+      Alert.alert('성공', '비밀번호가 성공적으로 변경되었습니다.', [
+        {
+          text: '확인',
+          onPress: () => router.back(),
+        },
+      ]);
+    } catch (error: any) {
+      console.error('❌ 비밀번호 변경 실패:', error);
+      console.error('에러 상태 코드:', error.response?.status);
+      console.error('에러 응답 데이터:', error.response?.data);
+
+      let errorMessage = '비밀번호 변경 중 오류가 발생했습니다.';
+
+      if (error.response?.status === 400) {
+        errorMessage = '현재 비밀번호가 올바르지 않습니다.';
+      } else if (error.response?.status === 401) {
+        errorMessage = '현재 비밀번호가 올바르지 않습니다.';
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      }
+
+      Alert.alert('비밀번호 변경 실패', errorMessage);
+    } finally {
+      setIsUpdating(false);
+    }
   };
 
   const isFormValid =
@@ -103,8 +199,8 @@ export default function ChangePasswordScreen() {
             <Text style={styles.ruleText}>
               ✓ 영문, 숫자, 특수문자 포함 8자 이상
             </Text>
-            <Text style={styles.ruleText}>✓ 연속 문자 불가</Text>
-            <Text style={styles.ruleText}>✓ 이메일(아이디) 불가</Text>
+            <Text style={styles.ruleText}>✓ 연속된 문자 3자 이상 불가</Text>
+            <Text style={styles.ruleText}>✓ 현재 비밀번호와 다르게 설정</Text>
           </View>
         </View>
 
@@ -133,19 +229,23 @@ export default function ChangePasswordScreen() {
         <TouchableOpacity
           style={[
             styles.submitButton,
-            !isFormValid && styles.submitButtonDisabled,
+            (!isFormValid || isUpdating) && styles.submitButtonDisabled,
           ]}
           onPress={handleSubmit}
-          disabled={!isFormValid}
+          disabled={!isFormValid || isUpdating}
         >
-          <Text
-            style={[
-              styles.submitButtonText,
-              !isFormValid && styles.submitButtonTextDisabled,
-            ]}
-          >
-            등록
-          </Text>
+          {isUpdating ? (
+            <ActivityIndicator size="small" color="#FFFFFF" />
+          ) : (
+            <Text
+              style={[
+                styles.submitButtonText,
+                (!isFormValid || isUpdating) && styles.submitButtonTextDisabled,
+              ]}
+            >
+              등록
+            </Text>
+          )}
         </TouchableOpacity>
       </View>
     </View>
@@ -244,7 +344,7 @@ const styles = StyleSheet.create({
   submitButtonText: {
     fontSize: 16,
     fontWeight: '500',
-    color: '#FFFFFF',
+    color: '#000000',
   },
   submitButtonTextDisabled: {
     color: '#666666',

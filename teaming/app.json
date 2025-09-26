@@ -17,6 +17,18 @@
           {
             "CFBundleURLName": "kakao",
             "CFBundleURLSchemes": ["kakaobab0d232a194e56bd4920ba68c04e3e6"]
+          },
+          {
+            "CFBundleURLName": "google",
+            "CFBundleURLSchemes": ["com.teaming.app"]
+          },
+          {
+            "CFBundleURLName": "apple",
+            "CFBundleURLSchemes": ["com.teaming.app"]
+          },
+          {
+            "CFBundleURLName": "payment",
+            "CFBundleURLSchemes": ["teaming"]
           }
         ],
         "KAKAO_APP_KEY": "bab0d232a194e56bd4920ba68c04e3e6"
@@ -35,6 +47,24 @@
           "data": [
             {
               "scheme": "kakaobab0d232a194e56bd4920ba68c04e3e6"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        },
+        {
+          "action": "VIEW",
+          "data": [
+            {
+              "scheme": "com.teaming.app"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        },
+        {
+          "action": "VIEW",
+          "data": [
+            {
+              "scheme": "teaming"
             }
           ],
           "category": ["BROWSABLE", "DEFAULT"]
@@ -67,7 +97,9 @@
           "backgroundColor": "#ffffff"
         }
       ],
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-apple-authentication",
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true
