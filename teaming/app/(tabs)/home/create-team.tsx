@@ -23,6 +23,9 @@ import {
   CreateTeamRequest,
 } from '../../../src/services/teamService';
 import api from '../../../src/services/api';
+import { AvatarService } from '../../../src/services/avatarService';
+import * as FileSystem from 'expo-file-system';
+import * as Crypto from 'expo-crypto';
 
 const { width } = Dimensions.get('window');
 
@@ -33,6 +36,8 @@ export default function CreateTeamScreen() {
   const [selectedRoom, setSelectedRoom] = useState('demo');
   const [emails, setEmails] = useState(['', '', '']);
   const [roomImage, setRoomImage] = useState<string | null>(null);
+  const [roomImageKey, setRoomImageKey] = useState<string | null>(null);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
 
   // 초대 모달 상태
   const [showInviteModal, setShowInviteModal] = useState(false);
@@ -82,9 +87,9 @@ export default function CreateTeamScreen() {
         | 'BASIC'
         | 'STANDARD'
         | 'ELITE',
-      // 이미지가 있으면 imageKey 설정, 없으면 undefined
-      imageKey: roomImage ? `team-image-${Date.now()}` : undefined,
-      imageVersion: roomImage ? 1 : undefined,
+      // 이미지가 있으면 S3 업로드된 imageKey 사용, 없으면 undefined
+      imageKey: roomImageKey || undefined,
+      imageVersion: roomImageKey ? 1 : undefined,
     };
 
     console.log('📤 팀 생성 요청 데이터:', teamData);
@@ -270,15 +275,40 @@ export default function CreateTeamScreen() {
       });
 
       if (!result.canceled && result.assets.length > 0) {
-        setRoomImage(result.assets[0].uri);
+        const asset = result.assets[0];
+        setRoomImage(asset.uri);
+
+        // S3 업로드 시작
+        setIsUploadingImage(true);
+
+        try {
+          console.log('🚀 채팅방 이미지 S3 업로드 시작');
+          const uploadResult = await AvatarService.uploadAvatar(asset.uri);
+
+          console.log('✅ 채팅방 이미지 업로드 성공:', uploadResult);
+          setRoomImageKey(uploadResult.avatarKey);
+
+          Alert.alert('성공', '채팅방 이미지가 업로드되었습니다!');
+        } catch (uploadError) {
+          console.error('❌ 채팅방 이미지 업로드 실패:', uploadError);
+          Alert.alert(
+            '업로드 실패',
+            '이미지 업로드에 실패했습니다. 다시 시도해주세요.'
+          );
+          setRoomImage(null);
+        } finally {
+          setIsUploadingImage(false);
+        }
       }
     } catch (error) {
+      console.error('이미지 선택 오류:', error);
       Alert.alert('오류', '이미지를 선택하는 중 오류가 발생했습니다.');
     }
   };
 
   const handleRemoveRoomImage = () => {
     setRoomImage(null);
+    setRoomImageKey(null);
   };
 
   // 팀원수에 맞춰 이메일 배열 조정
@@ -360,8 +390,14 @@ export default function CreateTeamScreen() {
           <TouchableOpacity
             style={styles.imageContainer}
             onPress={handleSelectRoomImage}
+            disabled={isUploadingImage}
           >
-            {roomImage ? (
+            {isUploadingImage ? (
+              <View style={styles.imagePlaceholder}>
+                <ActivityIndicator size="large" color="#4A90E2" />
+                <Text style={styles.placeholderText}>업로드 중...</Text>
+              </View>
+            ) : roomImage ? (
               <Image source={{ uri: roomImage }} style={styles.roomImage} />
             ) : (
               <View style={styles.imagePlaceholder}>

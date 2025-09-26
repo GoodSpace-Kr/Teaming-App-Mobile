@@ -31,7 +31,6 @@ import {
   updateSockToken,
   type ChatMessage,
 } from '@/src/services/stompClient';
-import { FileService } from '@/src/services/fileService';
 import { UploadProgress } from '@/src/types/file';
 import {
   getMessageHistory,
@@ -106,11 +105,18 @@ export default function ChatRoomScreen() {
       if (message.sender && message.sender.id) {
         const senderId = message.sender.id;
         if (!memberMap.has(senderId)) {
+          console.log('👤 멤버 정보 추출:', {
+            senderId,
+            name: message.sender.name,
+            avatarUrl: message.sender.avatarUrl,
+            avatarVersion: message.sender.avatarVersion,
+          });
+
           memberMap.set(senderId, {
             memberId: senderId,
             name: message.sender.name || 'Unknown',
             avatarKey: message.sender.avatarUrl || '',
-            avatarVersion: 0, // ChatSender에 avatarVersion이 없으므로 기본값 사용
+            avatarVersion: message.sender.avatarVersion || 0,
             roomRole:
               senderId === currentUserId && role === 'LEADER'
                 ? 'LEADER'
@@ -158,7 +164,15 @@ export default function ChatRoomScreen() {
         historyMessages.length,
         '개'
       );
-      setMessages(historyMessages);
+
+      // 메시지를 시간순으로 정렬 (오래된 것부터 최신 순)
+      const sortedMessages = historyMessages.sort((a, b) => {
+        const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return timeA - timeB;
+      });
+
+      setMessages(sortedMessages);
 
       // 메시지에서 실제 멤버 목록 추출
       const extractedMembers = extractMembersFromMessages(historyMessages);
@@ -280,7 +294,7 @@ export default function ChatRoomScreen() {
                     return prev;
                   }
 
-                  // 새 메시지 추가 후 시간순으로 정렬
+                  // 새 메시지 추가 후 시간순으로 정렬 (최신 메시지가 아래로)
                   const newMessages = [...prev, message].sort((a, b) => {
                     const timeA = a.createdAt
                       ? new Date(a.createdAt).getTime()
@@ -288,7 +302,7 @@ export default function ChatRoomScreen() {
                     const timeB = b.createdAt
                       ? new Date(b.createdAt).getTime()
                       : 0;
-                    return timeA - timeB;
+                    return timeA - timeB; // 오름차순 유지 (오래된 것부터)
                   });
 
                   console.log('📨 새로운 메시지 개수:', newMessages.length);
@@ -344,26 +358,126 @@ export default function ChatRoomScreen() {
   console.log('🔄 현재 메시지 개수:', messages.length);
   console.log('🔄 현재 메시지들:', messages);
   console.log('👤 현재 사용자 ID:', currentUserId);
-  const displayMessages = messages.map((msg: ChatMessage) => ({
-    id: msg.messageId || 0,
-    text: msg.content || '',
-    user: msg.sender?.name || 'Unknown',
-    userImage: msg.sender?.avatarUrl ? { uri: msg.sender.avatarUrl } : null,
-    timestamp: msg.createdAt
-      ? new Date(msg.createdAt).toLocaleTimeString('ko-KR', {
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: true,
-        })
-      : new Date().toLocaleTimeString('ko-KR', {
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: true,
-        }),
-    isMe: currentUserId !== null && msg.sender?.id === currentUserId, // 현재 사용자 ID와 비교
-    attachments: msg.attachments || [], // 파일 첨부 정보 추가
-    // readCount: 1, // TODO: 실제 읽음 수 구현 - 주석 처리 (나중에 사용 예정)
-  }));
+  const displayMessages = messages.map((msg: ChatMessage) => {
+    console.log('📨 메시지 변환:', {
+      messageId: msg.messageId,
+      type: msg.type,
+      content: msg.content,
+      attachments: msg.attachments,
+    });
+
+    // attachments를 FileChatBubble에서 사용할 수 있는 형태로 변환
+    const formattedAttachments = (msg.attachments || []).map(
+      (attachment: any) => ({
+        fileId: attachment.fileId,
+        fileName: msg.content, // msg.content에서 파일명 가져오기
+        contentType: attachment.mimeType,
+        size: attachment.byteSize,
+      })
+    );
+
+    const isMe = currentUserId !== null && msg.sender?.id === currentUserId;
+
+    return {
+      id: msg.messageId || 0,
+      text: msg.content || '',
+      user: msg.sender?.name || 'Unknown',
+      userImage: msg.sender?.avatarUrl ? { uri: msg.sender.avatarUrl } : null,
+      timestamp: msg.createdAt
+        ? new Date(msg.createdAt).toLocaleTimeString('ko-KR', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true,
+          })
+        : new Date().toLocaleTimeString('ko-KR', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true,
+          }),
+      isMe, // 현재 사용자 ID와 비교
+      attachments: formattedAttachments, // 파일 첨부 정보 추가
+      // readCount: 1, // TODO: 실제 읽음 수 구현 - 주석 처리 (나중에 사용 예정)
+    };
+  });
+
+  // 백엔드가 허용하는 Content-Type으로 변환하는 함수
+  const getValidContentType = (
+    originalType: string,
+    fileName: string
+  ): string => {
+    // 백엔드가 허용하는 타입: image/, video/, audio/, application/pdf
+
+    // 이미 image/, video/, audio/로 시작하는 경우 그대로 사용
+    if (
+      originalType.startsWith('image/') ||
+      originalType.startsWith('video/') ||
+      originalType.startsWith('audio/') ||
+      originalType === 'application/pdf'
+    ) {
+      return originalType;
+    }
+
+    // 파일 확장자로 타입 추정
+    const extension = fileName.toLowerCase().split('.').pop();
+
+    switch (extension) {
+      // 이미지 파일
+      case 'jpg':
+      case 'jpeg':
+        return 'image/jpeg';
+      case 'png':
+        return 'image/png';
+      case 'gif':
+        return 'image/gif';
+      case 'webp':
+        return 'image/webp';
+
+      // 비디오 파일
+      case 'mp4':
+        return 'video/mp4';
+      case 'avi':
+        return 'video/avi';
+      case 'mov':
+        return 'video/quicktime';
+      case 'wmv':
+        return 'video/x-ms-wmv';
+
+      // 오디오 파일
+      case 'mp3':
+        return 'audio/mpeg';
+      case 'wav':
+        return 'audio/wav';
+      case 'aac':
+        return 'audio/aac';
+
+      // 문서 파일
+      case 'pdf':
+        return 'application/pdf';
+      case 'doc':
+        return 'application/msword';
+      case 'docx':
+        return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      case 'xls':
+        return 'application/vnd.ms-excel';
+      case 'xlsx':
+        return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+      case 'ppt':
+        return 'application/vnd.ms-powerpoint';
+      case 'pptx':
+        return 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+      case 'txt':
+        return 'text/plain';
+      case 'hwp':
+        return 'application/x-hwp';
+
+      // 기본값 (이미지로 처리)
+      default:
+        console.warn(
+          `알 수 없는 파일 타입: ${originalType}, 파일명: ${fileName}. image/jpeg로 처리합니다.`
+        );
+        return 'image/jpeg';
+    }
+  };
 
   const handleBackPress = () => {
     // 좌측 슬라이드 애니메이션으로 뒤로가기
@@ -431,10 +545,14 @@ export default function ChatRoomScreen() {
       if (!result.canceled && result.assets[0]) {
         const asset = result.assets[0];
         if (isConnected) {
+          const validContentType = getValidContentType(
+            asset.type || 'image/jpeg',
+            asset.fileName || '이미지'
+          );
           await uploadAndSendFile(
             asset.uri,
             asset.fileName || '이미지',
-            asset.type || 'image/jpeg',
+            validContentType,
             asset.fileSize || 0,
             'image'
           );
@@ -460,10 +578,14 @@ export default function ChatRoomScreen() {
       if (!result.canceled && result.assets[0]) {
         const asset = result.assets[0];
         if (isConnected) {
+          const validContentType = getValidContentType(
+            asset.type || 'video/mp4',
+            asset.fileName || '동영상'
+          );
           await uploadAndSendFile(
             asset.uri,
             asset.fileName || '동영상',
-            asset.type || 'video/mp4',
+            validContentType,
             asset.fileSize || 0,
             'video'
           );
@@ -488,10 +610,14 @@ export default function ChatRoomScreen() {
       if (!result.canceled && result.assets[0]) {
         const asset = result.assets[0];
         if (isConnected) {
+          const validContentType = getValidContentType(
+            asset.mimeType || 'application/octet-stream',
+            asset.name
+          );
           await uploadAndSendFile(
             asset.uri,
             asset.name,
-            asset.mimeType || 'application/octet-stream',
+            validContentType,
             asset.size || 0,
             'document'
           );
@@ -506,7 +632,7 @@ export default function ChatRoomScreen() {
     }
   };
 
-  // 파일 업로드 및 전송 통합 함수
+  // 파일 업로드 및 전송 통합 함수 (프론트엔드 방식 적용)
   const uploadAndSendFile = async (
     fileUri: string,
     fileName: string,
@@ -518,38 +644,121 @@ export default function ChatRoomScreen() {
       setIsUploading(true);
       setUploadProgress({ loaded: 0, total: fileSize, percentage: 0 });
 
-      console.log('📤 파일 업로드 시작:', {
-        fileName,
-        contentType,
-        fileSize: FileService.formatFileSize(fileSize),
-        fileType,
+      console.log('=== 파일 업로드 Intent 시작 ===');
+      console.log('파일 정보:', {
+        name: fileName,
+        size: fileSize,
+        type: contentType,
+        uploadType: fileType,
       });
+      console.log('백엔드로 전송할 Content-Type:', contentType);
 
-      // S3에 파일 업로드
-      const fileId = await FileService.uploadFile(
-        Number(id),
-        fileUri,
-        fileName,
-        contentType,
-        fileSize,
-        (progress) => {
-          setUploadProgress(progress);
-          console.log(`📊 업로드 진행률: ${progress.percentage.toFixed(1)}%`);
+      // JWT 토큰 가져오기
+      const token = await getAccessToken();
+      if (!token) {
+        Alert.alert('오류', '인증 토큰이 없습니다.');
+        return;
+      }
+
+      // 1. Intent API 요청
+      const requestBody = {
+        fileName: fileName,
+        contentType: contentType,
+        size: fileSize,
+      };
+
+      const intentResponse = await fetch(
+        `https://teamingkr.duckdns.org/api/files/intent/${id}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(requestBody),
         }
       );
 
-      console.log('✅ 파일 업로드 완료, fileId:', fileId);
+      console.log('Intent API 응답 상태:', intentResponse.status);
 
-      // SockJS 클라이언트로 파일 메시지 전송
-      if (fileType === 'image') {
-        sendImageSock(Number(id), fileName, [fileId]);
-      } else if (fileType === 'video') {
-        sendFileSock(Number(id), fileName, [fileId]);
-      } else {
-        sendFileSock(Number(id), fileName, [fileId]);
+      if (!intentResponse.ok) {
+        const errorText = await intentResponse.text();
+        console.error('Intent API 실패:', errorText);
+        Alert.alert('업로드 실패', `파일 업로드 준비 실패: ${errorText}`);
+        return;
       }
 
-      Alert.alert('전송 완료', `${fileName}이(가) 전송되었습니다.`);
+      const intentData = await intentResponse.json();
+      console.log('Intent 성공:', intentData);
+
+      // 2. S3에 파일 업로드
+      console.log('=== S3 업로드 시작 ===');
+
+      // 파일을 Blob으로 변환 (프론트엔드와 동일한 방식)
+      const response = await fetch(fileUri);
+      const blob = await response.blob();
+
+      const s3UploadResponse = await fetch(intentData.url, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': contentType,
+        },
+        body: blob,
+      });
+
+      console.log('S3 업로드 응답 상태:', s3UploadResponse.status);
+
+      if (!s3UploadResponse.ok) {
+        const errorText = await s3UploadResponse.text();
+        console.error('S3 업로드 실패:', errorText);
+        Alert.alert('업로드 실패', '파일 업로드에 실패했습니다.');
+        return;
+      }
+
+      console.log('S3 업로드 성공!');
+
+      // 3. Complete API 호출
+      console.log('=== 파일 업로드 확정 시작 ===');
+      const completeResponse = await fetch(
+        `https://teamingkr.duckdns.org/api/files/complete/${id}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            key: intentData.key,
+          }),
+        }
+      );
+
+      console.log('Complete API 응답 상태:', completeResponse.status);
+
+      if (!completeResponse.ok) {
+        const errorText = await completeResponse.text();
+        console.error('Complete API 실패:', errorText);
+        Alert.alert('업로드 실패', '파일 업로드 확정에 실패했습니다.');
+        return;
+      }
+
+      const completeData = await completeResponse.json();
+      console.log('파일 업로드 완료:', completeData);
+
+      // 4. 파일 타입에 따라 WebSocket 메시지 타입 결정
+      const messageType = fileType === 'image' ? 'IMAGE' : 'FILE';
+
+      // 5. WebSocket으로 파일 메시지 전송 (fileId 배열로 전달)
+      if (messageType === 'IMAGE') {
+        sendImageSock(Number(id), fileName, [completeData.fileId], fileSize);
+      } else {
+        sendFileSock(Number(id), fileName, [completeData.fileId], fileSize);
+      }
+
+      Alert.alert(
+        '전송 완료',
+        `파일 "${fileName}"이 성공적으로 업로드되었습니다!`
+      );
 
       // 스크롤을 맨 아래로
       setTimeout(() => {

@@ -31,6 +31,7 @@ export interface ChatSender {
   id?: number;
   name?: string;
   avatarUrl?: string;
+  avatarVersion?: number;
 }
 export interface ChatMessage {
   messageId?: number;
@@ -266,7 +267,8 @@ export function sendTextSock(roomId: number, content: string) {
 export function sendImageSock(
   roomId: number,
   fileName: string,
-  fileIds: number[]
+  fileIds: number[],
+  fileSize?: number
 ) {
   const c = ensureClient();
   if (!c.connected) throw new Error('Not connected');
@@ -278,6 +280,7 @@ export function sendImageSock(
       type: 'IMAGE',
       name: fileName,
       attachmentFileIdsInOrder: fileIds,
+      fileSize: fileSize,
       clientMessageId: `client_${Date.now()}_${Math.random()
         .toString(36)
         .substr(2, 9)}`,
@@ -288,7 +291,8 @@ export function sendImageSock(
 export function sendFileSock(
   roomId: number,
   fileName: string,
-  fileIds: number[]
+  fileIds: number[],
+  fileSize?: number
 ) {
   const c = ensureClient();
   if (!c.connected) throw new Error('Not connected');
@@ -300,6 +304,7 @@ export function sendFileSock(
       type: 'FILE',
       name: fileName,
       attachmentFileIdsInOrder: fileIds,
+      fileSize: fileSize,
       clientMessageId: `client_${Date.now()}_${Math.random()
         .toString(36)
         .substr(2, 9)}`,

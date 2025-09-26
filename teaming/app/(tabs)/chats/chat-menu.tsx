@@ -57,21 +57,41 @@ export default function ChatMenuScreen() {
 
   // members 정보를 파싱하여 참가자 목록 생성
   const participants: Participant[] = React.useMemo(() => {
+    console.log('🔍 상단 메뉴 - members 파라미터:', members);
+
     if (!members) {
+      console.log('❌ members 정보가 없음');
       // members 정보가 없으면 빈 목록 반환
       return [];
     }
 
     try {
       const membersData = JSON.parse(decodeURIComponent(members as string));
+      console.log('📋 상단 메뉴 - 파싱된 members 데이터:', membersData);
 
-      return membersData.map((member: any, index: number) => ({
-        id: member.memberId,
-        name:
-          member.roomRole === 'LEADER' ? `${member.name}(팀장)` : member.name,
-        avatar: member.avatarUrl ? { uri: member.avatarUrl } : null,
-        isMe: member.name === currentUserName,
-      }));
+      return membersData.map((member: any, index: number) => {
+        const isMe = member.name === currentUserName;
+        console.log(`👤 멤버 ${index + 1}:`, {
+          memberId: member.memberId,
+          name: member.name,
+          avatarKey: member.avatarKey,
+          avatarUrl: member.avatarUrl,
+          roomRole: member.roomRole,
+          isMe: isMe,
+        });
+
+        return {
+          id: member.memberId,
+          name:
+            member.roomRole === 'LEADER' ? `${member.name}(팀장)` : member.name,
+          avatar: member.avatarUrl
+            ? { uri: member.avatarUrl }
+            : member.avatarKey
+            ? { uri: member.avatarKey }
+            : null,
+          isMe,
+        };
+      });
     } catch (error) {
       console.error('❌ members 파싱 실패:', error);
       // 파싱 실패 시 빈 목록 반환

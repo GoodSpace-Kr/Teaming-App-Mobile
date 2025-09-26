@@ -197,87 +197,96 @@ export default function ChatsScreen() {
             </Text>
           </View>
         ) : (
-          chatRooms.map((room) => (
-            <TouchableOpacity
-              key={room.roomId}
-              style={styles.chatRoomCard}
-              onPress={() =>
-                handleEnterChatRoom(
-                  room.roomId,
-                  room.role,
-                  room.success,
-                  room.members,
-                  room.title
-                )
-              }
-            >
-              <View style={styles.chatRoomContent}>
-                {/* 채팅방 아이콘 */}
-                <View style={styles.roomIconContainer}>
-                  {room.imageKey ? (
-                    <Image
-                      source={{
-                        uri: `https://your-cdn-url.com/${room.imageKey}`,
-                      }}
-                      style={styles.roomIcon}
-                      defaultSource={require('../../../assets/images/(beforeLogin)/bluePeople.png')}
-                      onError={() => {
-                        console.log('이미지 로드 실패, 기본 아이콘으로 대체');
-                      }}
-                    />
-                  ) : (
-                    <View style={styles.defaultRoomIcon}>
-                      <Ionicons name="people" size={20} color="#4A90E2" />
-                    </View>
-                  )}
-                  {room.unreadCount > 0 && (
-                    <View style={styles.unreadBadge}>
-                      <Text style={styles.unreadText}>
-                        {room.unreadCount > 99 ? '99+' : room.unreadCount}
-                      </Text>
-                    </View>
-                  )}
-                </View>
+          chatRooms.map((room) => {
+            console.log(`🏠 채팅방 ${room.roomId}:`, {
+              title: room.title,
+              avatarUrl: room.avatarUrl,
+              memberCount: room.memberCount,
+            });
 
-                <View style={styles.roomInfo}>
-                  <View style={styles.roomTitleRow}>
-                    <View style={styles.titleContainer}>
-                      <Text style={styles.roomTitle} numberOfLines={1}>
-                        {room.title}
-                      </Text>
-                      {room.success && (
-                        <View style={styles.completionBadge}>
-                          <Ionicons
-                            name="checkmark"
-                            size={14}
-                            color="#FFFFFF"
-                          />
-                        </View>
-                      )}
-                    </View>
+            return (
+              <TouchableOpacity
+                key={room.roomId}
+                style={styles.chatRoomCard}
+                onPress={() =>
+                  handleEnterChatRoom(
+                    room.roomId,
+                    room.role,
+                    room.success,
+                    room.members,
+                    room.title
+                  )
+                }
+              >
+                <View style={styles.chatRoomContent}>
+                  {/* 채팅방 아이콘 */}
+                  <View style={styles.roomIconContainer}>
+                    {room.avatarUrl ? (
+                      <Image
+                        source={{ uri: room.avatarUrl }}
+                        style={styles.roomIcon}
+                        defaultSource={require('../../../assets/images/(beforeLogin)/bluePeople.png')}
+                        onError={() => {
+                          console.log(
+                            '채팅방 아바타 이미지 로드 실패, 기본 아이콘으로 대체'
+                          );
+                        }}
+                      />
+                    ) : (
+                      <View style={styles.defaultRoomIcon}>
+                        <Ionicons name="people" size={20} color="#4A90E2" />
+                      </View>
+                    )}
+                    {room.unreadCount > 0 && (
+                      <View style={styles.unreadBadge}>
+                        <Text style={styles.unreadText}>
+                          {room.unreadCount > 99 ? '99+' : room.unreadCount}
+                        </Text>
+                      </View>
+                    )}
                   </View>
 
-                  {room.lastMessage ? (
-                    <Text style={styles.lastMessage} numberOfLines={1}>
-                      {room.lastMessage.sender.name}: {room.lastMessage.content}
-                    </Text>
-                  ) : (
-                    <Text style={styles.lastMessage} numberOfLines={1}>
-                      메시지가 없습니다
-                    </Text>
-                  )}
-                </View>
+                  <View style={styles.roomInfo}>
+                    <View style={styles.roomTitleRow}>
+                      <View style={styles.titleContainer}>
+                        <Text style={styles.roomTitle} numberOfLines={1}>
+                          {room.title}
+                        </Text>
+                        {room.success && (
+                          <View style={styles.completionBadge}>
+                            <Ionicons
+                              name="checkmark"
+                              size={14}
+                              color="#FFFFFF"
+                            />
+                          </View>
+                        )}
+                      </View>
+                    </View>
 
-                <View style={styles.timeContainer}>
-                  {room.lastMessage && (
-                    <Text style={styles.lastMessageTime}>
-                      {formatTime(room.lastMessage.createdAt)}
-                    </Text>
-                  )}
+                    {room.lastMessage ? (
+                      <Text style={styles.lastMessage} numberOfLines={1}>
+                        {room.lastMessage.sender.name}:{' '}
+                        {room.lastMessage.content}
+                      </Text>
+                    ) : (
+                      <Text style={styles.lastMessage} numberOfLines={1}>
+                        메시지가 없습니다
+                      </Text>
+                    )}
+                  </View>
+
+                  <View style={styles.timeContainer}>
+                    {room.lastMessage && (
+                      <Text style={styles.lastMessageTime}>
+                        {formatTime(room.lastMessage.createdAt)}
+                      </Text>
+                    )}
+                  </View>
                 </View>
-              </View>
-            </TouchableOpacity>
-          ))
+              </TouchableOpacity>
+            );
+          })
         )}
       </ScrollView>
     </View>

@@ -103,29 +103,15 @@ export default function FileChatBubble({
   };
 
   const handleFileAction = async (attachment: FileAttachment, url: string) => {
-    const { contentType, fileName } = attachment;
+    const { fileName } = attachment;
 
-    if (contentType.startsWith('image/')) {
-      // 이미지는 미리보기 또는 공유
-      Alert.alert('이미지', '이미지를 어떻게 하시겠습니까?', [
-        { text: '취소', style: 'cancel' },
-        { text: '공유', onPress: () => shareFile(url, fileName) },
-      ]);
-    } else if (contentType.startsWith('video/')) {
-      // 동영상은 공유
-      Alert.alert('동영상', '동영상을 어떻게 하시겠습니까?', [
-        { text: '취소', style: 'cancel' },
-        { text: '공유', onPress: () => shareFile(url, fileName) },
-      ]);
-    } else {
-      // 문서는 다운로드 후 공유
-      try {
-        const localUri = await downloadFile(url, fileName);
-        await shareFile(localUri, fileName);
-      } catch (error) {
-        console.error('❌ 파일 다운로드 실패:', error);
-        Alert.alert('오류', '파일을 다운로드할 수 없습니다.');
-      }
+    // 모든 파일을 다운로드 후 공유
+    try {
+      const localUri = await downloadFile(url, fileName);
+      await shareFile(localUri, fileName);
+    } catch (error) {
+      console.error('❌ 파일 다운로드 실패:', error);
+      Alert.alert('오류', '파일을 다운로드할 수 없습니다.');
     }
   };
 
@@ -182,9 +168,16 @@ export default function FileChatBubble({
       >
         <View style={styles.fileIconContainer}>
           {isDownloading ? (
-            <ActivityIndicator size="small" color={iconColor} />
+            <ActivityIndicator
+              size="small"
+              color={isMe ? '#FFFFFF' : '#007AFF'}
+            />
           ) : (
-            <Ionicons name={iconName as any} size={24} color={iconColor} />
+            <Ionicons
+              name="download-outline"
+              size={24}
+              color={isMe ? '#FFFFFF' : '#007AFF'}
+            />
           )}
         </View>
 
@@ -197,17 +190,9 @@ export default function FileChatBubble({
           </Text>
           {attachment.size && (
             <Text style={styles.fileSize}>
-              {formatFileSize(attachment.size)}
+              용량: {formatFileSize(attachment.size)}
             </Text>
           )}
-        </View>
-
-        <View style={styles.downloadIcon}>
-          <Ionicons
-            name="download-outline"
-            size={16}
-            color={textColor === '#FFFFFF' ? '#CCCCCC' : '#666666'}
-          />
         </View>
       </TouchableOpacity>
     );
@@ -237,10 +222,6 @@ export default function FileChatBubble({
       )}
 
       <View style={bubbleStyle}>
-        <Text style={[styles.fileMessageText, { color: textColor }]}>
-          파일 {attachments.length}개
-        </Text>
-
         {attachments.map((attachment, index) =>
           renderFileAttachment(attachment, index)
         )}
@@ -284,26 +265,22 @@ const styles = StyleSheet.create({
     position: 'relative',
     alignItems: 'center',
   },
-  fileMessageText: {
-    fontSize: 14,
-    fontWeight: '500',
-    marginBottom: 8,
-    color: '#CCCCCC',
-  },
   fileItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 4,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
     borderRadius: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    marginBottom: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    marginBottom: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   fileIconContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0, 122, 255, 0.1)',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
@@ -313,16 +290,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   fileName: {
-    fontSize: 14,
-    fontWeight: '500',
-    marginBottom: 2,
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 4,
+    color: '#FFFFFF',
   },
   fileSize: {
     fontSize: 12,
     color: '#CCCCCC',
-  },
-  downloadIcon: {
-    marginLeft: 8,
   },
   timestamp: {
     fontSize: 11,

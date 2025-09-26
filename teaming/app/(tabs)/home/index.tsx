@@ -171,12 +171,13 @@ export default function HomeScreen() {
 
                   <View style={styles.teamCardHeader}>
                     {/* 팀 이미지 또는 기본 아이콘 */}
-                    {team.imageKey ? (
+                    {team.avatarUrl ? (
                       <Image
-                        source={{
-                          uri: `https://your-cdn-url.com/${team.imageKey}`,
-                        }}
+                        source={{ uri: team.avatarUrl }}
                         style={styles.teamIcon}
+                        onError={() => {
+                          console.log('팀 아바타 이미지 로드 실패');
+                        }}
                       />
                     ) : (
                       <View style={styles.defaultTeamIcon}>

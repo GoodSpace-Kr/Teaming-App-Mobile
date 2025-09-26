@@ -5,7 +5,7 @@ export interface ChatMember {
   memberId: number;
   lastReadMessageId: number;
   name: string;
-  avatarKey: string;
+  avatarUrl: string;
   avatarVersion: number;
   roomRole: 'LEADER' | 'MEMBER';
 }
@@ -31,8 +31,8 @@ export interface ChatRoom {
   unreadCount: number;
   lastMessage: LastMessage | null;
   title: string;
-  imageKey: string;
-  imageVersion: number;
+  avatarUrl: string;
+  avatarVersion: number;
   type: 'DEMO' | 'BASIC' | 'STANDARD' | 'ELITE'; // 방 타입
   memberCount: number;
   success: boolean;

@@ -390,8 +390,8 @@ export interface RoomDetailResponse {
   roomId: number;
   title: string;
   description: string;
-  imageKey: string;
-  imageVersion: number;
+  avatarUrl: string;
+  avatarVersion: number;
   type: 'DEMO' | 'BASIC' | 'STANDARD' | 'ELITE';
   memberCount: number;
   maxMemberCount: number;
@@ -400,7 +400,7 @@ export interface RoomDetailResponse {
   members: Array<{
     memberId: number;
     name: string;
-    avatarKey: string;
+    avatarUrl: string;
     avatarVersion: number;
     roomRole: 'LEADER' | 'MEMBER';
     lastReadMessageId: number;

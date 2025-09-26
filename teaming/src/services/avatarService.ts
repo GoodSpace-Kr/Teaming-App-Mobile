@@ -62,6 +62,27 @@ export class AvatarService {
   }
 
   /**
+   * 다른 사용자의 아바타 URL 발급
+   * @param userId 사용자 ID
+   * @returns 사용자 아바타 URL
+   */
+  static async getUserAvatarUrl(userId: number): Promise<AvatarUrlResponse> {
+    try {
+      console.log('🚀 사용자 아바타 URL 발급 요청:', userId);
+
+      const response = await apiClient.post<AvatarUrlResponse>(
+        `/users/${userId}/avatar/url`
+      );
+
+      console.log('✅ 사용자 아바타 URL 발급 성공:', response.data);
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ 사용자 아바타 URL 발급 실패:', error);
+      throw error;
+    }
+  }
+
+  /**
    * 2단계: 아바타 업로드 의도 등록 (Presigned PUT URL 발급)
    * @param fileInfo 파일 정보
    * @returns Presigned URL과 key
