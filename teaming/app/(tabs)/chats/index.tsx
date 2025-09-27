@@ -34,6 +34,10 @@ export default function ChatsScreen() {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentHtml, setPaymentHtml] = useState('');
   const [selectedRoom, setSelectedRoom] = useState<ChatRoom | null>(null);
+  const [showPaymentSuccessModal, setShowPaymentSuccessModal] = useState(false);
+  const [showPaymentFailureModal, setShowPaymentFailureModal] = useState(false);
+  const [shouldRenderWebView, setShouldRenderWebView] = useState(true);
+  const [paymentTimer, setPaymentTimer] = useState<number | null>(null);
 
   // JWT 토큰 가져오기
   useEffect(() => {
@@ -146,9 +150,6 @@ export default function ChatsScreen() {
         paymentAmount
       );
 
-      // (선택) 받아온 HTML 일부 로그로 확인
-      console.log('🧾 paymentHtml prefix:', paymentHtmlResponse?.slice(0, 180));
-
       // 백엔드에서 받은 HTML을 그대로 사용 (수정하지 않음)
       const modifiedHtml = paymentHtmlResponse;
 
@@ -163,24 +164,56 @@ export default function ChatsScreen() {
 
   // 결제 모달 닫기
   const handlePaymentModalClose = () => {
+    // 타이머 정리
+    if (paymentTimer) {
+      clearTimeout(paymentTimer);
+      setPaymentTimer(null);
+    }
+
     setShowPaymentModal(false);
     setPaymentHtml('');
     setSelectedRoom(null);
+    setShouldRenderWebView(true); // WebView 렌더링 상태 초기화
   };
 
-  // 결제 완료 처리
-  const handlePaymentComplete = async () => {
-    console.log('✅ 결제 완료');
-    handlePaymentModalClose();
+  // 결제 성공 처리
+  const handlePaymentSuccess = async () => {
+    console.log('✅ 결제 성공 - 웹뷰 모달 즉시 닫기');
 
-    // 서버 상태 업데이트를 위해 잠시 대기
+    // 1. 먼저 웹뷰 모달을 즉시 닫기
+    setShowPaymentModal(false);
+    setPaymentHtml('');
+    setSelectedRoom(null);
+
+    // 2. 서버 상태 업데이트를 위해 잠시 대기
     console.log('⏳ 서버 상태 업데이트 대기 중...');
     await new Promise((resolve) => setTimeout(resolve, 2000));
 
-    // 채팅방 목록 새로고침
+    // 3. 채팅방 목록 새로고침
     await fetchChatRooms();
 
-    // 추가 대기 후 결제 완료된 방으로 자동 이동
+    // 4. 성공 모달 표시
+    setShowPaymentSuccessModal(true);
+  };
+
+  // 결제 실패 처리
+  const handlePaymentFailure = () => {
+    console.log('❌ 결제 실패 - 웹뷰 모달 즉시 닫기');
+
+    // 1. 먼저 웹뷰 모달을 즉시 닫기
+    setShowPaymentModal(false);
+    setPaymentHtml('');
+    setSelectedRoom(null);
+
+    // 2. 실패 모달 표시
+    setShowPaymentFailureModal(true);
+  };
+
+  // 결제 성공 모달 확인 버튼
+  const handlePaymentSuccessConfirm = () => {
+    setShowPaymentSuccessModal(false);
+
+    // 결제한 채팅방으로 이동
     if (selectedRoom) {
       console.log('🚀 결제 완료된 방으로 이동:', selectedRoom.roomId);
       const membersParam = encodeURIComponent(
@@ -193,6 +226,12 @@ export default function ChatsScreen() {
     }
   };
 
+  // 결제 실패 모달 확인 버튼
+  const handlePaymentFailureConfirm = () => {
+    setShowPaymentFailureModal(false);
+    // 채팅방 목록에 그대로 머무름 (별도 라우팅 없음)
+  };
+
   const handleEnterChatRoom = (
     roomId: number,
     role: 'LEADER' | 'MEMBER',
@@ -200,7 +239,8 @@ export default function ChatsScreen() {
     members: any[],
     title: string,
     paymentStatus: string,
-    roomType: any
+    roomType: any,
+    memberCount: number
   ) => {
     // 결제가 필요한 경우 결제 웹뷰 표시
     if (paymentStatus === 'NOT_PAID') {
@@ -212,7 +252,7 @@ export default function ChatsScreen() {
         title,
         paymentStatus,
         type: roomType,
-        memberCount: members.length,
+        memberCount: memberCount,
       };
       handlePayment(room);
       return;
@@ -303,7 +343,8 @@ export default function ChatsScreen() {
                       room.members,
                       room.title,
                       room.paymentStatus,
-                      room.type
+                      room.type,
+                      room.memberCount
                     )
                   }
                 >
@@ -401,12 +442,12 @@ export default function ChatsScreen() {
               {/* 임시 테스트 버튼 */}
               <TouchableOpacity
                 onPress={() => {
-                  console.log('🧪 임시 결제 완료 버튼 클릭');
-                  handlePaymentComplete();
+                  console.log('🧪 임시 결제 성공 버튼 클릭');
+                  handlePaymentSuccess();
                 }}
                 style={styles.testButton}
               >
-                <Text style={styles.testButtonText}>테스트 완료</Text>
+                <Text style={styles.testButtonText}>테스트 성공</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.paymentModalCloseButton}
@@ -417,7 +458,7 @@ export default function ChatsScreen() {
             </View>
           </View>
 
-          {paymentHtml && (
+          {paymentHtml && shouldRenderWebView && (
             <WebView
               source={{ html: paymentHtml }}
               style={styles.paymentWebView}
@@ -440,29 +481,58 @@ export default function ChatsScreen() {
                 const { nativeEvent } = syntheticEvent;
                 console.log('🌐 HTTP 응답 상태:', nativeEvent.statusCode);
                 console.log('🌐 HTTP 응답 URL:', nativeEvent.url);
+                // HTTP 에러는 로그만 출력 (Deep Link로 결제 결과 처리)
+              }}
+              onShouldStartLoadWithRequest={(request) => {
+                console.log('🌐 웹뷰 로드 요청:', request.url);
 
-                // 백엔드에서 200 OK 응답을 받았을 때만 결제 완료로 처리
-                if (
-                  nativeEvent.statusCode === 200 &&
-                  nativeEvent.url.includes('/api/payment/request')
-                ) {
-                  console.log('✅ 백엔드에서 결제 완료 200 OK 응답 수신');
-                  handlePaymentComplete();
+                // teaming:// URL 감지 시 즉시 차단하고 처리
+                if (request.url.startsWith('teaming://payment/')) {
+                  console.log('📱 결제 결과 Deep Link 감지:', request.url);
+
+                  // 타이머 정리 (Deep Link가 먼저 감지된 경우)
+                  if (paymentTimer) {
+                    clearTimeout(paymentTimer);
+                    setPaymentTimer(null);
+                    console.log('⏰ 기존 타이머 정리됨 (Deep Link 우선 처리)');
+                  }
+
+                  // WebView 렌더링 즉시 중단
+                  setShouldRenderWebView(false);
+
+                  if (request.url.includes('/success')) {
+                    console.log('✅ 결제 성공 감지 - 웹뷰 렌더링 중단');
+                    handlePaymentSuccess();
+                  } else if (request.url.includes('/fail')) {
+                    console.log('❌ 결제 실패 감지 - 웹뷰 렌더링 중단');
+                    handlePaymentFailure();
+                  }
+                  return false; // URL 로드 차단
                 }
+
+                return true; // 다른 URL은 정상 로드 허용
               }}
               onNavigationStateChange={(navState) => {
                 console.log('🌐 웹뷰 네비게이션:', navState.url);
                 console.log('🌐 로딩 상태:', navState.loading);
 
-                // 앱 스킴으로 리다이렉트되는 경우 감지
-                if (navState.url.startsWith('teaming://')) {
-                  console.log('📱 앱 스킴 감지:', navState.url);
-                  return false; // 웹뷰에서 앱 스킴으로 이동하지 않도록 차단
-                }
-
-                // 결제 진행 상황 로그만 출력 (결제 완료로 처리하지 않음)
+                // 결제 진행 상황 로그만 출력
                 if (navState.url.includes('/api/payment/request')) {
                   console.log('🔄 백엔드 결제 처리 중:', navState.url);
+
+                  // 기존 타이머가 있다면 정리
+                  if (paymentTimer) {
+                    clearTimeout(paymentTimer);
+                  }
+
+                  // 2초 후 자동으로 결제 성공 처리
+                  console.log('⏰ 2초 후 자동 결제 성공 처리 시작');
+                  const timer = setTimeout(() => {
+                    console.log('✅ 타이머 기반 결제 성공 처리');
+                    handlePaymentSuccess();
+                  }, 2000);
+
+                  setPaymentTimer(timer);
                 }
                 if (navState.url.includes('sandbox-pay.nicepay.co.kr')) {
                   console.log('💳 NicePay 결제 화면 로드됨:', navState.url);
@@ -474,6 +544,58 @@ export default function ChatsScreen() {
               }}
             />
           )}
+        </View>
+      </Modal>
+
+      {/* 결제 성공 모달 */}
+      <Modal
+        visible={showPaymentSuccessModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowPaymentSuccessModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.resultModalContainer}>
+            <View style={styles.successIconContainer}>
+              <Ionicons name="checkmark-circle" size={64} color="#4CAF50" />
+            </View>
+            <Text style={styles.resultModalTitle}>결제 완료!</Text>
+            <Text style={styles.resultModalMessage}>
+              결제가 성공적으로 완료되었습니다.
+            </Text>
+            <TouchableOpacity
+              style={styles.resultModalButton}
+              onPress={handlePaymentSuccessConfirm}
+            >
+              <Text style={styles.resultModalButtonText}>확인</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* 결제 실패 모달 */}
+      <Modal
+        visible={showPaymentFailureModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowPaymentFailureModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.resultModalContainer}>
+            <View style={styles.failureIconContainer}>
+              <Ionicons name="close-circle" size={64} color="#FF6B6B" />
+            </View>
+            <Text style={styles.resultModalTitle}>결제 실패</Text>
+            <Text style={styles.resultModalMessage}>
+              결제에 실패했습니다. 다시 시도해주세요.
+            </Text>
+            <TouchableOpacity
+              style={styles.resultModalButton}
+              onPress={handlePaymentFailureConfirm}
+            >
+              <Text style={styles.resultModalButtonText}>확인</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </Modal>
     </View>
@@ -712,5 +834,56 @@ const styles = StyleSheet.create({
   },
   paymentWebView: {
     flex: 1,
+  },
+
+  // 결제 결과 모달 스타일
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  resultModalContainer: {
+    backgroundColor: '#121216',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#292929',
+    padding: 24,
+    marginHorizontal: 20,
+    alignItems: 'center',
+    minWidth: 280,
+  },
+  successIconContainer: {
+    marginBottom: 16,
+  },
+  failureIconContainer: {
+    marginBottom: 16,
+  },
+  resultModalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  resultModalMessage: {
+    fontSize: 16,
+    color: '#CCCCCC',
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 24,
+  },
+  resultModalButton: {
+    backgroundColor: '#4A90E2',
+    paddingHorizontal: 32,
+    paddingVertical: 12,
+    borderRadius: 8,
+    minWidth: 120,
+  },
+  resultModalButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
   },
 });
