@@ -23,7 +23,6 @@ import { subscribeRoomSock } from '../../../src/services/stompClient';
 import { createPayment } from '../../../src/services/api';
 
 const { width } = Dimensions.get('window');
-
 export default function ChatsScreen() {
   const [chatRooms, setChatRooms] = useState<ChatRoom[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -147,13 +146,11 @@ export default function ChatsScreen() {
         paymentAmount
       );
 
-      // 결제 HTML에서 appScheme과 returnUrl 수정
-      const modifiedHtml = paymentHtmlResponse
-        .replace(/appScheme: '[^']*'/g, "appScheme: 'teaming://'")
-        .replace(
-          /returnUrl: '[^']*'/g,
-          "returnUrl: 'https://teamingkr.duckdns.org/api/payment/request'"
-        );
+      // (선택) 받아온 HTML 일부 로그로 확인
+      console.log('🧾 paymentHtml prefix:', paymentHtmlResponse?.slice(0, 180));
+
+      // 백엔드에서 받은 HTML을 그대로 사용 (수정하지 않음)
+      const modifiedHtml = paymentHtmlResponse;
 
       setSelectedRoom(room);
       setPaymentHtml(modifiedHtml);
@@ -172,15 +169,20 @@ export default function ChatsScreen() {
   };
 
   // 결제 완료 처리
-  const handlePaymentComplete = () => {
+  const handlePaymentComplete = async () => {
     console.log('✅ 결제 완료');
     handlePaymentModalClose();
 
-    // 채팅방 목록 새로고침
-    fetchChatRooms();
+    // 서버 상태 업데이트를 위해 잠시 대기
+    console.log('⏳ 서버 상태 업데이트 대기 중...');
+    await new Promise((resolve) => setTimeout(resolve, 2000));
 
-    // 결제 완료된 방으로 자동 이동
+    // 채팅방 목록 새로고침
+    await fetchChatRooms();
+
+    // 추가 대기 후 결제 완료된 방으로 자동 이동
     if (selectedRoom) {
+      console.log('🚀 결제 완료된 방으로 이동:', selectedRoom.roomId);
       const membersParam = encodeURIComponent(
         JSON.stringify(selectedRoom.members)
       );
@@ -395,117 +397,80 @@ export default function ChatsScreen() {
         <View style={styles.paymentModalContainer}>
           <View style={styles.paymentModalHeader}>
             <Text style={styles.paymentModalTitle}>결제하기</Text>
-            <TouchableOpacity
-              style={styles.paymentModalCloseButton}
-              onPress={handlePaymentModalClose}
-            >
-              <Ionicons name="close" size={24} color="#FFFFFF" />
-            </TouchableOpacity>
+            <View style={styles.paymentModalButtons}>
+              {/* 임시 테스트 버튼 */}
+              <TouchableOpacity
+                onPress={() => {
+                  console.log('🧪 임시 결제 완료 버튼 클릭');
+                  handlePaymentComplete();
+                }}
+                style={styles.testButton}
+              >
+                <Text style={styles.testButtonText}>테스트 완료</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.paymentModalCloseButton}
+                onPress={handlePaymentModalClose}
+              >
+                <Ionicons name="close" size={24} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
           </View>
 
           {paymentHtml && (
             <WebView
-              source={{
-                html: paymentHtml,
-                baseUrl: 'https://teamingkr.duckdns.org', // 상대경로 리소스 대비
-              }}
+              source={{ html: paymentHtml }}
               style={styles.paymentWebView}
-              // ✅ 결제에 필요한 권한/설정
-              javaScriptEnabled
-              domStorageEnabled
-              mixedContentMode="always"
-              thirdPartyCookiesEnabled
-              javaScriptCanOpenWindowsAutomatically
-              setSupportMultipleWindows={false}
-              originWhitelist={['*']}
-              // ✅ 결제 JS가 로드되기 전에 serverAuth 주입
-              injectedJavaScriptBeforeContentLoaded={`
-                (function() {
-                  // ✅ 결제 스크립트가 참조하는 인증 컨텍스트
-                  window.serverAuth = { accessToken: ${JSON.stringify(
-                    jwt || ''
-                  )} };
-
-                  // 혹시 HTML 치환이 누락되도 안전하게 기본값 셋
-                  window.__APP_SCHEME__ = 'teaming://';
-                  window.__RETURN_URL__ = 'https://teamingkr.duckdns.org/api/payment/request';
-
-                  // 콘솔 포워딩 (디버깅)
-                  try {
-                    ['log','warn','error'].forEach(function(k){
-                      const orig = console[k].bind(console);
-                      console[k] = function(){
-                        try { window.ReactNativeWebView.postMessage(JSON.stringify({
-                          type:'console-log',
-                          message: Array.from(arguments).map(String).join(' ')
-                        })); } catch(e){}
-                        return orig.apply(console, arguments);
-                      }
-                    })
-                  } catch(e){}
-                })();
-                true; // iOS 필요
-              `}
-              // (보강) 로드 후도 한 번 더 기본값 주입
-              injectedJavaScript={`
-                try {
-                  if (!window.NICEPAY_APP_SCHEME) window.NICEPAY_APP_SCHEME = 'teaming://';
-                  if (!window.NICEPAY_RETURN_URL) window.NICEPAY_RETURN_URL = 'https://teamingkr.duckdns.org/api/payment/request';
-                } catch(e){}
-                true;
-              `}
-              onShouldStartLoadWithRequest={(req) => {
-                const url = req.url || '';
-                if (/^(teaming|intent|market|tel|mailto):/i.test(url)) {
-                  try {
-                    Linking.openURL(url);
-                  } catch (e) {}
-                  return false; // WebView 내 네비게이션 중단하고 앱으로 넘김
-                }
-                return true;
+              javaScriptEnabled={true}
+              domStorageEnabled={true}
+              startInLoadingState={true}
+              scalesPageToFit={true}
+              userAgent="Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1"
+              onLoadStart={() => {
+                console.log('🌐 웹뷰 로딩 시작');
               }}
-              onNavigationStateChange={(nav) => {
-                console.log(
-                  '🌐 웹뷰 네비게이션:',
-                  nav.url,
-                  'loading=',
-                  nav.loading
-                );
+              onLoadEnd={() => {
+                console.log('🌐 웹뷰 로딩 완료');
               }}
-              onLoadEnd={({ nativeEvent }) => {
-                console.log('✅ 페이지 로드 완료:', nativeEvent.url);
-                if (nativeEvent.url.includes('/api/payment/request')) {
+              onError={(syntheticEvent) => {
+                const { nativeEvent } = syntheticEvent;
+                console.error('❌ 웹뷰 에러:', nativeEvent);
+              }}
+              onHttpError={(syntheticEvent) => {
+                const { nativeEvent } = syntheticEvent;
+                console.log('🌐 HTTP 응답 상태:', nativeEvent.statusCode);
+                console.log('🌐 HTTP 응답 URL:', nativeEvent.url);
+
+                // 백엔드에서 200 OK 응답을 받았을 때만 결제 완료로 처리
+                if (
+                  nativeEvent.statusCode === 200 &&
+                  nativeEvent.url.includes('/api/payment/request')
+                ) {
+                  console.log('✅ 백엔드에서 결제 완료 200 OK 응답 수신');
                   handlePaymentComplete();
                 }
               }}
-              onError={({ nativeEvent }) => {
-                console.log('❌ 웹뷰 에러:', nativeEvent);
-              }}
-              onHttpError={({ nativeEvent }) => {
-                console.log(
-                  '🚨 HTTP 에러:',
-                  nativeEvent.statusCode,
-                  nativeEvent.url
-                );
-                if (
-                  nativeEvent.statusCode < 200 ||
-                  nativeEvent.statusCode >= 300
-                ) {
-                  handlePaymentModalClose();
-                  Alert.alert(
-                    '결제 실패',
-                    '결제에 실패했습니다. 다시 시도해주세요.'
-                  );
+              onNavigationStateChange={(navState) => {
+                console.log('🌐 웹뷰 네비게이션:', navState.url);
+                console.log('🌐 로딩 상태:', navState.loading);
+
+                // 앱 스킴으로 리다이렉트되는 경우 감지
+                if (navState.url.startsWith('teaming://')) {
+                  console.log('📱 앱 스킴 감지:', navState.url);
+                  return false; // 웹뷰에서 앱 스킴으로 이동하지 않도록 차단
+                }
+
+                // 결제 진행 상황 로그만 출력 (결제 완료로 처리하지 않음)
+                if (navState.url.includes('/api/payment/request')) {
+                  console.log('🔄 백엔드 결제 처리 중:', navState.url);
+                }
+                if (navState.url.includes('sandbox-pay.nicepay.co.kr')) {
+                  console.log('💳 NicePay 결제 화면 로드됨:', navState.url);
                 }
               }}
               onMessage={(event) => {
-                try {
-                  const msg = JSON.parse(event.nativeEvent.data);
-                  console.log('📨 웹뷰 메시지 수신:', msg);
-                  if (msg.type === 'payment-complete') handlePaymentComplete();
-                } catch {
-                  console.log('📨 웹뷰 raw 메시지:', event.nativeEvent.data);
-                }
+                // 웹뷰에서 메시지 받기 (필요시에만)
+                console.log('📨 웹뷰 메시지:', event.nativeEvent.data);
               }}
             />
           )}
@@ -728,6 +693,22 @@ const styles = StyleSheet.create({
   },
   paymentModalCloseButton: {
     padding: 8,
+  },
+  paymentModalButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  testButton: {
+    backgroundColor: '#4CAF50',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  testButtonText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
   },
   paymentWebView: {
     flex: 1,

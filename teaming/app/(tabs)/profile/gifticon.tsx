@@ -61,11 +61,17 @@ export default function GifticonScreen() {
       const userData = await getUserInfo();
       setUserInfo(userData);
 
-      // 사용자 ID로 기프티콘 조회
-      const gifticonData = await getGifticons(1);
-      setGifticons(gifticonData);
-
-      console.log('기프티콘 데이터 로드 완료:', gifticonData);
+      // 사용자 이메일로 기프티콘 조회
+      if (userData.email) {
+        console.log('📧 사용자 이메일:', userData.email);
+        const gifticonData = await getGifticons(userData.email);
+        setGifticons(gifticonData);
+        console.log('기프티콘 데이터 로드 완료:', gifticonData);
+      } else {
+        console.error('사용자 이메일 정보가 없습니다.');
+        console.log('📋 받은 사용자 데이터:', userData);
+        Alert.alert('오류', '사용자 정보를 불러올 수 없습니다.');
+      }
     } catch (error) {
       console.error('기프티콘 데이터 로드 실패:', error);
       Alert.alert('오류', '기프티콘 정보를 불러오는데 실패했습니다.');

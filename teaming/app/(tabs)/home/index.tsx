@@ -68,21 +68,6 @@ export default function HomeScreen() {
     router.push('/(tabs)/home/join-team');
   };
 
-  const handleEnterTeam = (
-    roomId: number,
-    role: 'LEADER' | 'MEMBER',
-    success: boolean
-  ) => {
-    // 채팅방 목록을 거쳐서 채팅방으로 이동
-    router.push('/(tabs)/chats');
-    // 약간의 지연 후 채팅방으로 이동
-    setTimeout(() => {
-      router.push(
-        `/(tabs)/chats/chat-room/${roomId}?role=${role}&success=${success}`
-      );
-    }, 100);
-  };
-
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
@@ -225,15 +210,6 @@ export default function HomeScreen() {
                       </Text>
                     </View>
                   </View>
-
-                  <TouchableOpacity
-                    style={styles.enterButton}
-                    onPress={() =>
-                      handleEnterTeam(team.roomId, team.role, team.success)
-                    }
-                  >
-                    <Text style={styles.enterButtonText}>들어가기</Text>
-                  </TouchableOpacity>
                 </View>
               ))}
             </ScrollView>
@@ -400,24 +376,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     textAlign: 'center',
     minWidth: 60,
-  },
-  enterButton: {
-    backgroundColor: '#007AFF',
-    borderRadius: 20,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    alignSelf: 'flex-end',
-    shadowColor: '#007AFF',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.4,
-    shadowRadius: 6,
-    elevation: 4,
-    marginTop: 20,
-  },
-  enterButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#FFFFFF',
   },
   scheduleContainer: {
     gap: 12,

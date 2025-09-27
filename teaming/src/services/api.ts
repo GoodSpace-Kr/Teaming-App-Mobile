@@ -279,16 +279,20 @@ export const updatePassword = async (
 };
 
 // 결제 API
+// 🔄 교체: 결제 HTML 받기 (GET /payment/html?amount&roomId, text/html)
 export const createPayment = async (
   roomId: number,
   amount: number
 ): Promise<string> => {
   try {
+    const params = { amount, roomId, platform: 'APP' };
+    console.log('🚀 결제 HTML 요청 파라미터:', params);
+
     const res = await apiClient.get('/payment/html', {
-      params: { amount, roomId }, // ✅ 둘 다 전달
-      headers: { Accept: 'text/html' }, // ✅ 백엔드가 html 을 반환
+      params, // ✅ amount, roomId, platform 모두 포함
+      headers: { Accept: 'text/html' }, // ✅ 백엔드가 text/html 반환
       responseType: 'text', // ✅ string으로 받기
-      transformResponse: [(data) => data], // ✅ axios가 JSON 파싱 시도 못 하게
+      transformResponse: [(data) => data], // ✅ axios가 JSON 파싱 시도 못하게 원본 유지
     });
     return res.data as string;
   } catch (error) {
@@ -453,16 +457,20 @@ export interface GifticonItem {
   grade: 'BASIC' | 'STANDARD' | 'ELITE';
 }
 
-export const getGifticons = async (userId: number): Promise<GifticonItem[]> => {
+export const getGifticons = async (email: string): Promise<GifticonItem[]> => {
   try {
-    console.log('🚀 기프티콘 조회 API 요청 - userId:', userId);
+    console.log('🚀 기프티콘 조회 API 요청 - email:', email);
+    console.log('📤 전달할 파라미터:', { email });
+
     const response = await apiClient.get<GifticonItem[]>('/admin/gifticon', {
-      params: { userId },
+      params: { email },
     });
+
     console.log('✅ 기프티콘 조회 성공:', response.data);
     return response.data;
   } catch (error: any) {
     console.error('❌ 기프티콘 조회 실패:', error);
+    console.error('📥 에러 응답:', error.response?.data);
     throw error;
   }
 };
