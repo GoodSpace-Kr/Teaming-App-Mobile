@@ -438,24 +438,12 @@ export default function ChatsScreen() {
         <View style={styles.paymentModalContainer}>
           <View style={styles.paymentModalHeader}>
             <Text style={styles.paymentModalTitle}>결제하기</Text>
-            <View style={styles.paymentModalButtons}>
-              {/* 임시 테스트 버튼 */}
-              <TouchableOpacity
-                onPress={() => {
-                  console.log('🧪 임시 결제 성공 버튼 클릭');
-                  handlePaymentSuccess();
-                }}
-                style={styles.testButton}
-              >
-                <Text style={styles.testButtonText}>테스트 성공</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.paymentModalCloseButton}
-                onPress={handlePaymentModalClose}
-              >
-                <Ionicons name="close" size={24} color="#FFFFFF" />
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity
+              style={styles.paymentModalCloseButton}
+              onPress={handlePaymentModalClose}
+            >
+              <Ionicons name="close" size={24} color="#FFFFFF" />
+            </TouchableOpacity>
           </View>
 
           {paymentHtml && shouldRenderWebView && (
@@ -815,22 +803,6 @@ const styles = StyleSheet.create({
   },
   paymentModalCloseButton: {
     padding: 8,
-  },
-  paymentModalButtons: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  testButton: {
-    backgroundColor: '#4CAF50',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-  },
-  testButtonText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '600',
   },
   paymentWebView: {
     flex: 1,
