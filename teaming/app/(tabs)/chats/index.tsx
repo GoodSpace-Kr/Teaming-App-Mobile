@@ -37,7 +37,7 @@ export default function ChatsScreen() {
   const [showPaymentSuccessModal, setShowPaymentSuccessModal] = useState(false);
   const [showPaymentFailureModal, setShowPaymentFailureModal] = useState(false);
   const [shouldRenderWebView, setShouldRenderWebView] = useState(true);
-  const [paymentTimer, setPaymentTimer] = useState<number | null>(null);
+  const [paymentTimer, setPaymentTimer] = useState<NodeJS.Timeout | null>(null);
 
   // JWT 토큰 가져오기
   useEffect(() => {
@@ -517,10 +517,12 @@ export default function ChatsScreen() {
                   console.log('⏰ 2초 후 자동 결제 성공 처리 시작');
                   const timer = setTimeout(() => {
                     console.log('✅ 타이머 기반 결제 성공 처리');
-                    handlePaymentSuccess();
+                    if (showPaymentModal) {
+                      handlePaymentSuccess();
+                    }
                   }, 2000);
 
-                  setPaymentTimer(timer);
+                  setPaymentTimer(timer as any);
                 }
                 if (navState.url.includes('sandbox-pay.nicepay.co.kr')) {
                   console.log('💳 NicePay 결제 화면 로드됨:', navState.url);
