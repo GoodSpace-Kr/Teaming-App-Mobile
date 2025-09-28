@@ -82,3 +82,13 @@ export interface TaskListResponse {
 export interface TaskDetailResponse extends Task {
   // 상세 조회 시 추가 정보가 있을 수 있음
 }
+
+// 홈화면에서 사용할 간단한 과제 정보
+export interface AssignmentSummary {
+  assignmentId: number;
+  roomId: number;
+  title: string;
+  description: string;
+  due: string; // ISO 8601 형식
+  status: 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+}

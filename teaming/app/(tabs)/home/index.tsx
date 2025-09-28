@@ -13,12 +13,16 @@ import { router, useFocusEffect } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { getChatRooms, ChatRoom } from '../../../src/services/chatService';
+import { TaskService } from '../../../src/services/taskService';
+import { AssignmentSummary } from '../../../src/types/task';
 
 const { width } = Dimensions.get('window');
 
 export default function HomeScreen() {
   const [teams, setTeams] = useState<ChatRoom[]>([]);
+  const [assignments, setAssignments] = useState<AssignmentSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isAssignmentsLoading, setIsAssignmentsLoading] = useState(true);
 
   // 팀 목록 가져오기
   const loadTeams = async () => {
@@ -34,31 +38,86 @@ export default function HomeScreen() {
     }
   };
 
-  // 홈 탭이 포커스될 때마다 팀 목록 새로고침
+  // 과제 목록 가져오기
+  const loadAssignments = async () => {
+    try {
+      setIsAssignmentsLoading(true);
+      const assignmentSummaries = await TaskService.getAssignmentSummaries();
+      setAssignments(assignmentSummaries);
+      console.log('✅ 홈 화면 과제 목록 로드 완료:', assignmentSummaries);
+    } catch (error) {
+      console.error('❌ 과제 목록 로드 실패:', error);
+    } finally {
+      setIsAssignmentsLoading(false);
+    }
+  };
+
+  // 홈 탭이 포커스될 때마다 팀 목록과 과제 목록 새로고침
   useFocusEffect(
     useCallback(() => {
-      console.log('홈 화면 포커스 - 팀 목록 새로고침');
+      console.log('홈 화면 포커스 - 팀 목록 및 과제 목록 새로고침');
       loadTeams();
+      loadAssignments();
     }, [])
   );
 
-  const schedules = [
-    {
-      id: 1,
-      color: '#4A90E2',
-      title: '정치학 발표 - 오늘 18:00에 Discord 오프라인 회의',
-    },
-    {
-      id: 2,
-      color: '#8B5CF6',
-      title: '마케팅 - 9월 3일 (수)까지 자료조사',
-    },
-    {
-      id: 3,
-      color: '#10B981',
-      title: '대학 생활 세미나 - 9월 5일 (금) 팀 소개 PPT 자료 만들기',
-    },
-  ];
+  // 과제 상태에 따른 색상 매핑
+  const getAssignmentColor = (status: string) => {
+    switch (status) {
+      case 'IN_PROGRESS':
+        return '#4A90E2';
+      case 'COMPLETED':
+        return '#10B981';
+      case 'CANCELLED':
+        return '#FF3B30';
+      default:
+        return '#8B5CF6';
+    }
+  };
+
+  // 과제 상태에 따른 텍스트 매핑
+  const getAssignmentStatusText = (status: string) => {
+    switch (status) {
+      case 'IN_PROGRESS':
+        return '진행중';
+      case 'COMPLETED':
+        return '완료';
+      case 'CANCELLED':
+        return '취소됨';
+      default:
+        return '알 수 없음';
+    }
+  };
+
+  // 날짜 포맷팅 함수
+  const formatDueDate = (dueDate: string) => {
+    const date = new Date(dueDate);
+    const now = new Date();
+    const diffTime = date.getTime() - now.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    if (diffDays < 0) {
+      return `마감됨 (${date.toLocaleDateString('ko-KR', {
+        month: 'short',
+        day: 'numeric',
+      })})`;
+    } else if (diffDays === 0) {
+      return `오늘 마감 (${date.toLocaleTimeString('ko-KR', {
+        hour: '2-digit',
+        minute: '2-digit',
+      })})`;
+    } else if (diffDays === 1) {
+      return `내일 마감 (${date.toLocaleDateString('ko-KR', {
+        month: 'short',
+        day: 'numeric',
+      })})`;
+    } else {
+      return `${diffDays}일 남음 (${date.toLocaleDateString('ko-KR', {
+        month: 'short',
+        day: 'numeric',
+      })})`;
+    }
+  };
 
   const handleCreateTeam = () => {
     router.push('/(tabs)/home/create-team');
@@ -207,19 +266,41 @@ export default function HomeScreen() {
         {/* 일정 한눈에 */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>일정 한눈에</Text>
-          <View style={styles.scheduleContainer}>
-            {schedules.map((schedule) => (
-              <View key={schedule.id} style={styles.scheduleItem}>
-                <View
-                  style={[
-                    styles.scheduleDot,
-                    { backgroundColor: schedule.color },
-                  ]}
-                />
-                <Text style={styles.scheduleText}>{schedule.title}</Text>
-              </View>
-            ))}
-          </View>
+          {isAssignmentsLoading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="small" color="#007AFF" />
+              <Text style={styles.loadingText}>과제 목록을 불러오는 중...</Text>
+            </View>
+          ) : assignments.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>진행 중인 과제가 없습니다.</Text>
+              <Text style={styles.emptySubtext}>
+                팀장이 과제를 만들면 여기에 표시됩니다!
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.scheduleContainer}>
+              {assignments.map((assignment) => (
+                <View key={assignment.assignmentId} style={styles.scheduleItem}>
+                  <View
+                    style={[
+                      styles.scheduleDot,
+                      {
+                        backgroundColor: getAssignmentColor(assignment.status),
+                      },
+                    ]}
+                  />
+                  <View style={styles.scheduleContent}>
+                    <Text style={styles.scheduleText}>{assignment.title}</Text>
+                    <Text style={styles.scheduleSubtext}>
+                      {formatDueDate(assignment.due)} •{' '}
+                      {getAssignmentStatusText(assignment.status)}
+                    </Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          )}
         </View>
       </ScrollView>
     </View>
@@ -388,6 +469,16 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     flex: 1,
     lineHeight: 20,
+    fontWeight: '600',
+  },
+  scheduleContent: {
+    flex: 1,
+  },
+  scheduleSubtext: {
+    fontSize: 12,
+    color: '#CCCCCC',
+    marginTop: 4,
+    lineHeight: 16,
   },
   loadingContainer: {
     flexDirection: 'row',
