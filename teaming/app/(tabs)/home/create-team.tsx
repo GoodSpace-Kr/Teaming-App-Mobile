@@ -70,7 +70,7 @@ export default function CreateTeamScreen() {
       return;
     }
 
-    // 팀 생성 요청 데이터 준비
+    // 팀 생성 요청 데이터 준비 (이미지는 방 생성 후 업로드)
     const teamData: CreateTeamRequest = {
       title: roomTitle.trim(),
       description: subtitle.trim(),
@@ -80,9 +80,9 @@ export default function CreateTeamScreen() {
         | 'BASIC'
         | 'STANDARD'
         | 'ELITE',
-      // 이미지가 있으면 S3 업로드된 imageKey 사용, 없으면 undefined
-      imageKey: roomImageKey || undefined,
-      imageVersion: roomImageKey ? 1 : undefined,
+      // 이미지는 방 생성 후 업로드하므로 undefined
+      imageKey: undefined,
+      imageVersion: undefined,
     };
 
     console.log('📤 팀 생성 요청 데이터:', teamData);
@@ -105,6 +105,29 @@ export default function CreateTeamScreen() {
       if (createdTeam.roomId) {
         setRoomId(createdTeam.roomId);
         console.log('🏠 생성된 방 ID:', createdTeam.roomId);
+
+        // 이미지가 있다면 roomId로 업로드
+        if (roomImage) {
+          console.log('🖼️ 이미지 업로드 시작 (roomId 포함)');
+          try {
+            setIsUploadingImage(true);
+
+            // 이미지 업로드 (roomId 포함)
+            const uploadResult = await AvatarService.uploadAvatar(
+              roomImage,
+              'ROOM',
+              createdTeam.roomId
+            );
+
+            console.log('✅ 이미지 업로드 성공:', uploadResult);
+            setRoomImageKey(uploadResult.avatarKey);
+          } catch (error) {
+            console.error('❌ 이미지 업로드 실패:', error);
+            // 에러가 있어도 모달은 표시
+          } finally {
+            setIsUploadingImage(false);
+          }
+        }
       } else {
         console.log('⚠️ roomId가 응답에 없습니다');
       }
@@ -159,31 +182,8 @@ export default function CreateTeamScreen() {
       if (!result.canceled && result.assets.length > 0) {
         const asset = result.assets[0];
         setRoomImage(asset.uri);
-
-        // S3 업로드 시작
-        setIsUploadingImage(true);
-
-        try {
-          console.log('🚀 채팅방 이미지 S3 업로드 시작');
-          const uploadResult = await AvatarService.uploadAvatar(
-            asset.uri,
-            'ROOM'
-          );
-
-          console.log('✅ 채팅방 이미지 업로드 성공:', uploadResult);
-          setRoomImageKey(uploadResult.avatarKey);
-
-          Alert.alert('성공', '채팅방 이미지가 업로드되었습니다!');
-        } catch (uploadError) {
-          console.error('❌ 채팅방 이미지 업로드 실패:', uploadError);
-          Alert.alert(
-            '업로드 실패',
-            '이미지 업로드에 실패했습니다. 다시 시도해주세요.'
-          );
-          setRoomImage(null);
-        } finally {
-          setIsUploadingImage(false);
-        }
+        // 이미지 선택만 하고 업로드는 방 생성 시에 수행
+        console.log('🖼️ 이미지 선택 완료, 방 생성 시 업로드 예정');
       }
     } catch (error) {
       console.error('이미지 선택 오류:', error);

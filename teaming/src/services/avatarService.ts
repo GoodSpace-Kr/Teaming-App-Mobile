@@ -8,6 +8,7 @@ export interface AvatarUploadIntentRequest {
   contentType: string;
   byteSize: number;
   ownerType: 'USER' | 'ROOM';
+  roomId?: number; // 방 생성 시 roomId 포함
 }
 
 export interface AvatarUploadIntentResponse {
@@ -24,6 +25,7 @@ export interface AvatarUploadCompleteRequest {
   width: number;
   height: number;
   ownerType: 'USER' | 'ROOM';
+  roomId?: number; // 방 생성 시 roomId 포함
 }
 
 export interface AvatarUploadCompleteResponse {
@@ -115,20 +117,27 @@ export class AvatarService {
    * @param width 이미지 너비
    * @param height 이미지 높이
    * @param ownerType 소유자 타입
+   * @param roomId 방 ID (ROOM 타입일 때만 사용)
    * @returns 아바타 정보
    */
   static async completeUpload(
     key: string,
     width: number,
     height: number,
-    ownerType: 'USER' | 'ROOM'
+    ownerType: 'USER' | 'ROOM',
+    roomId?: number
   ): Promise<AvatarUploadCompleteResponse> {
     try {
-      console.log('🚀 아바타 업로드 완료 확인:', { key, width, height });
+      console.log('🚀 아바타 업로드 완료 확인:', {
+        key,
+        width,
+        height,
+        roomId,
+      });
 
       const response = await apiClient.post<AvatarUploadCompleteResponse>(
         '/users/me/avatar/complete',
-        { key, width, height, ownerType }
+        { key, width, height, ownerType, roomId }
       );
 
       console.log('✅ 아바타 업로드 완료 확인 성공:', response.data);
@@ -191,11 +200,13 @@ export class AvatarService {
    * 전체 아바타 업로드 프로세스 (4단계 통합)
    * @param imageUri 로컬 이미지 URI
    * @param ownerType 소유자 타입 (USER: 사용자 아바타, ROOM: 채팅방 이미지)
+   * @param roomId 방 ID (ROOM 타입일 때만 사용)
    * @returns 아바타 정보
    */
   static async uploadAvatar(
     imageUri: string,
-    ownerType: 'USER' | 'ROOM' = 'USER'
+    ownerType: 'USER' | 'ROOM' = 'USER',
+    roomId?: number
   ): Promise<AvatarUploadCompleteResponse> {
     try {
       console.log('🚀 아바타 업로드 프로세스 시작:', imageUri);
@@ -208,6 +219,7 @@ export class AvatarService {
         contentType: 'image/jpeg',
         byteSize: optimizedImage.size,
         ownerType: ownerType,
+        roomId: roomId, // roomId 전달
       });
 
       console.log(
@@ -228,13 +240,63 @@ export class AvatarService {
         intentResponse.key,
         optimizedImage.width,
         optimizedImage.height,
-        ownerType
+        ownerType,
+        roomId
       );
 
       console.log('✅ 아바타 업로드 프로세스 완료:', completeResponse);
       return completeResponse;
     } catch (error: any) {
       console.error('❌ 아바타 업로드 프로세스 실패:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 방 생성 후 이미지 완료 처리를 위한 intent 요청
+   * @param request roomId가 포함된 intent 요청
+   * @returns Presigned URL과 key
+   */
+  static async uploadAvatarIntent(
+    request: AvatarUploadIntentRequest
+  ): Promise<AvatarUploadIntentResponse> {
+    try {
+      console.log('🚀 아바타 업로드 의도 등록 (roomId 포함):', request);
+
+      const response = await apiClient.post<AvatarUploadIntentResponse>(
+        '/users/me/avatar/intent',
+        request
+      );
+
+      console.log('✅ 아바타 업로드 의도 등록 성공:', response.data);
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ 아바타 업로드 의도 등록 실패:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 방 생성 후 이미지 완료 처리를 위한 complete 요청
+   * @param request avatarKey가 포함된 complete 요청
+   * @returns 아바타 정보
+   */
+  static async uploadAvatarComplete(request: {
+    avatarKey: string;
+    roomId?: number;
+  }): Promise<AvatarUploadCompleteResponse> {
+    try {
+      console.log('🚀 아바타 업로드 완료 확인 (avatarKey):', request);
+
+      const response = await apiClient.post<AvatarUploadCompleteResponse>(
+        '/users/me/avatar/complete',
+        request
+      );
+
+      console.log('✅ 아바타 업로드 완료 확인 성공:', response.data);
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ 아바타 업로드 완료 확인 실패:', error);
       throw error;
     }
   }
