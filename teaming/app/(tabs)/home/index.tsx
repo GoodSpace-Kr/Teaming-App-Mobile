@@ -176,18 +176,6 @@ export default function HomeScreen() {
                         {team.type.typeName} • {team.memberCount}명
                       </Text>
                     </View>
-
-                    {/* 마지막 메시지 시간 */}
-                    {team.lastMessage && (
-                      <Text style={styles.teamTime}>
-                        {new Date(
-                          team.lastMessage.createdAt
-                        ).toLocaleTimeString('ko-KR', {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
-                      </Text>
-                    )}
                   </View>
 
                   {/* 팀플 완료 상태 표시 - 좌측 하단 */}
