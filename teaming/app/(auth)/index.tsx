@@ -11,12 +11,14 @@ import {
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLandingStats } from '../../src/hooks/useLandingStats';
 
 const { width, height } = Dimensions.get('window');
 
 export default function LoginScreen() {
   const { stats, loading, error } = useLandingStats();
+  const insets = useSafeAreaInsets();
 
   const handleLoginPress = () => {
     router.push('/(auth)/login');
@@ -26,7 +28,12 @@ export default function LoginScreen() {
     <View style={styles.container}>
       <StatusBar style="light" />
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingTop: insets.top + 20 },
+        ]}
+      >
         {/* 상단 로고 섹션 */}
         <View style={styles.logoSection}>
           <Image
@@ -183,7 +190,6 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     paddingHorizontal: 20,
-    paddingTop: 60,
     paddingBottom: 40,
   },
 

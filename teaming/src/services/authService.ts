@@ -11,7 +11,7 @@ export const logout = async (): Promise<boolean> => {
 
     // 서버에 로그아웃 요청 (선택사항)
     try {
-      await apiClient.post('/api/auth/logout');
+      await apiClient.delete('/users/me/log-out');
       console.log('✅ 서버 로그아웃 성공');
     } catch (error) {
       console.log('⚠️ 서버 로그아웃 실패 (무시):', error);

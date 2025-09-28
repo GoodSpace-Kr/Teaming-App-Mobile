@@ -38,6 +38,13 @@ export default function ProfileLayout() {
           headerShown: false,
         }}
       />
+      <Stack.Screen
+        name="gifticon"
+        options={{
+          title: '내 기프티콘',
+          headerShown: false,
+        }}
+      />
     </Stack>
   );
 }

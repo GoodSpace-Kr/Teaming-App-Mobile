@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -15,6 +15,9 @@ import * as ImagePicker from 'expo-image-picker';
 import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
 import { sendEmailCode, verifyEmailCode } from '../../src/services/emailAuth';
+import { signUp, SignUpRequest } from '../../src/services/api';
+import { saveTokens } from '../../src/services/tokenManager';
+import { AvatarService } from '../../src/services/avatarService';
 
 const { width } = Dimensions.get('window');
 
@@ -29,12 +32,99 @@ export default function RegisterScreen() {
   const [isEmailVerified, setIsEmailVerified] = useState(false);
   const [isSendingCode, setIsSendingCode] = useState(false);
   const [isVerifyingCode, setIsVerifyingCode] = useState(false);
+  const [isSigningUp, setIsSigningUp] = useState(false);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const [avatarUploadComplete, setAvatarUploadComplete] = useState(false);
 
   const totalSteps = 6;
 
-  const handleNext = () => {
+  // 완료 화면에서 아바타 업로드 처리
+  const handleAvatarUpload = useCallback(async () => {
+    if (!profileImage || avatarUploadComplete || isUploadingAvatar) return;
+
+    try {
+      setIsUploadingAvatar(true);
+      console.log('🚀 완료 화면에서 프로필 이미지 S3 업로드 시작');
+
+      const avatarResult = await AvatarService.uploadAvatar(profileImage);
+      console.log('✅ 프로필 이미지 S3 업로드 완료:', avatarResult);
+
+      setAvatarUploadComplete(true);
+    } catch (uploadError) {
+      console.error('❌ 프로필 이미지 업로드 실패:', uploadError);
+      // 업로드 실패해도 사용자 경험을 해치지 않음
+    } finally {
+      setIsUploadingAvatar(false);
+    }
+  }, [profileImage, avatarUploadComplete, isUploadingAvatar]);
+
+  // 완료 화면에서 아바타 업로드 자동 시작 (한 번만 실행)
+  useEffect(() => {
+    if (
+      currentStep === 6 &&
+      profileImage &&
+      !avatarUploadComplete &&
+      !isUploadingAvatar
+    ) {
+      handleAvatarUpload();
+    }
+  }, [currentStep]); // currentStep만 의존성으로 설정
+
+  const handleNext = async () => {
     if (currentStep < totalSteps) {
-      setCurrentStep(currentStep + 1);
+      // 마지막 단계에서 회원가입 API 호출
+      if (currentStep === 5) {
+        await handleSignUp();
+      } else {
+        setCurrentStep(currentStep + 1);
+      }
+    }
+  };
+
+  const handleSignUp = async () => {
+    try {
+      setIsSigningUp(true);
+
+      // 먼저 기본 아바타로 회원가입
+      const signUpData: SignUpRequest = {
+        email,
+        password,
+        name: nickname,
+        avatarKey: 'default_avatar',
+        avatarVersion: 0,
+      };
+
+      console.log('회원가입 데이터:', signUpData);
+
+      const response = await signUp(signUpData);
+
+      // 토큰 저장
+      await saveTokens({
+        accessToken: response.accessToken,
+        refreshToken: response.refreshToken,
+        loginType: 'email',
+      });
+
+      console.log('회원가입 성공, 토큰 저장 완료');
+
+      // 다음 단계로 이동 (완료 화면)
+      setCurrentStep(6);
+    } catch (error: any) {
+      console.error('회원가입 실패:', error);
+
+      let errorMessage = '회원가입 중 오류가 발생했습니다.';
+
+      if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.response?.status === 400) {
+        errorMessage = '입력한 정보를 다시 확인해주세요.';
+      } else if (error.response?.status === 409) {
+        errorMessage = '이미 가입된 이메일입니다.';
+      }
+
+      Alert.alert('회원가입 실패', errorMessage);
+    } finally {
+      setIsSigningUp(false);
     }
   };
 
@@ -469,6 +559,26 @@ export default function RegisterScreen() {
       <Text style={styles.completionMessage}>
         새로운 회원님, Teaming에 가입해주셔서 감사합니다!
       </Text>
+
+      {/* 아바타 업로드 상태 표시 */}
+      {profileImage && (
+        <View style={styles.avatarUploadStatus}>
+          {isUploadingAvatar && (
+            <View style={styles.uploadingContainer}>
+              <ActivityIndicator size="small" color="#514EAC" />
+              <Text style={styles.uploadingText}>
+                프로필 이미지 업로드 중...
+              </Text>
+            </View>
+          )}
+          {avatarUploadComplete && (
+            <Text style={styles.uploadCompleteText}>
+              ✅ 프로필 이미지 업로드 완료!
+            </Text>
+          )}
+        </View>
+      )}
+
       <Text style={styles.completionSubMessage}>
         이제 모든 기능을 이용하실 수 있습니다.
       </Text>
@@ -545,14 +655,21 @@ export default function RegisterScreen() {
             <TouchableOpacity
               style={[
                 styles.nextButton,
-                { backgroundColor: canProceed() ? '#39359F' : '#333333' },
+                {
+                  backgroundColor:
+                    canProceed() && !isSigningUp ? '#39359F' : '#333333',
+                },
               ]}
               onPress={handleNext}
-              disabled={!canProceed()}
+              disabled={!canProceed() || isSigningUp}
             >
-              <Text style={styles.nextButtonText}>
-                {currentStep === totalSteps ? '완료' : '다음'}
-              </Text>
+              {isSigningUp ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Text style={styles.nextButtonText}>
+                  {currentStep === totalSteps ? '완료' : '다음'}
+                </Text>
+              )}
             </TouchableOpacity>
           </View>
         )}
@@ -855,5 +972,32 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     color: '#FFFFFF',
+  },
+
+  // 아바타 업로드 상태 스타일
+  avatarUploadStatus: {
+    marginVertical: 16,
+    alignItems: 'center',
+  },
+  uploadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1A1A1A',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#514EAC',
+  },
+  uploadingText: {
+    fontSize: 14,
+    color: '#514EAC',
+    marginLeft: 8,
+    fontWeight: '500',
+  },
+  uploadCompleteText: {
+    fontSize: 14,
+    color: '#34C759',
+    fontWeight: '500',
   },
 });

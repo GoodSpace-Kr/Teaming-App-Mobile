@@ -1,4 +1,4 @@
-// KakaoLoginWebView.tsx
+// NaverLoginWebView.tsx
 import React, { useMemo, useRef } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { WebView } from 'react-native-webview';
@@ -9,10 +9,10 @@ interface Props {
   onLoginError: (error: string) => void;
 }
 
-const REST_API_KEY = 'bab0d232a194e56bd4920ba68c04e3e6'; // Kakao REST API Key (네이티브/JS키 아님)
-const REDIRECT_URI = 'https://auth.expo.io/@staralstjr/teaming'; // Kakao 콘솔에 '정확히' 등록된 값
+const CLIENT_ID = 'VYf9Phuf2zxzz4YhzLNl'; // 네이버 개발자센터에서 발급받은 Client ID
+const REDIRECT_URI = 'https://auth.expo.io/@staralstjr/teaming'; // 네이버 콘솔에 등록된 값
 
-export default function KakaoLoginWebView({
+export default function NaverLoginWebView({
   onLoginSuccess,
   onLoginError,
 }: Props) {
@@ -22,13 +22,12 @@ export default function KakaoLoginWebView({
   const state = useMemo(() => Math.random().toString(36).slice(2), []);
 
   const AUTH_URL = useMemo(() => {
-    const base = 'https://kauth.kakao.com/oauth/authorize';
+    const base = 'https://nid.naver.com/oauth2.0/authorize';
     const qs =
       `response_type=code` +
-      `&client_id=${encodeURIComponent(REST_API_KEY)}` +
+      `&client_id=${encodeURIComponent(CLIENT_ID)}` +
       `&redirect_uri=${encodeURIComponent(REDIRECT_URI)}` +
-      `&state=${encodeURIComponent(state)}` +
-      `&prompt=login`; // 항상 계정 선택하고 싶으면
+      `&state=${encodeURIComponent(state)}`;
     return `${base}?${qs}`;
   }, [state]);
 
@@ -39,9 +38,16 @@ export default function KakaoLoginWebView({
           var u = new URL(url);
           var code = u.searchParams.get('code');
           var state = u.searchParams.get('state');
-          // Kakao가 리다이렉트하는 정확한 호스트로 제한 (중복/오탐 방지)
-          if (code && u.origin === 'https://auth.expo.io') {
-            window.ReactNativeWebView.postMessage(JSON.stringify({ url, code, state }));
+          var error = u.searchParams.get('error');
+          var errorDescription = u.searchParams.get('error_description');
+          
+          // 네이버가 리다이렉트하는 정확한 호스트로 제한 (중복/오탐 방지)
+          if (u.origin === 'https://auth.expo.io') {
+            if (error) {
+              window.ReactNativeWebView.postMessage(JSON.stringify({ url, error, errorDescription, state }));
+            } else if (code) {
+              window.ReactNativeWebView.postMessage(JSON.stringify({ url, code, state }));
+            }
           }
         } catch (e) {}
       }
@@ -60,7 +66,13 @@ export default function KakaoLoginWebView({
 
     try {
       const payload = JSON.parse(event.nativeEvent.data);
-      const { url, code, state: returnedState } = payload || {};
+      const {
+        url,
+        code,
+        state: returnedState,
+        error,
+        errorDescription,
+      } = payload || {};
       console.log('🔗 redirected URL:', url);
       console.log(
         '✅ code:',
@@ -70,6 +82,17 @@ export default function KakaoLoginWebView({
       );
       console.log('✅ state match:', returnedState === state);
 
+      // 에러가 있는 경우 처리
+      if (error) {
+        console.error('❌ 네이버 OAuth 에러 발생!');
+        console.error('❌ 에러 코드:', error);
+        console.error('❌ 에러 설명:', errorDescription);
+        onLoginError(
+          `${error}${errorDescription ? `: ${errorDescription}` : ''}`
+        );
+        return;
+      }
+
       if (!code) {
         onLoginError('인증 코드를 받지 못했습니다.');
         return;
@@ -77,9 +100,9 @@ export default function KakaoLoginWebView({
 
       // 서버에 code + redirectUri 전달 (백엔드 API 스펙에 맞춤)
       const body = { code, redirectUri: REDIRECT_URI };
-      console.log('📤 POST /api/auth/app/kakao', body);
+      console.log('📤 POST /api/auth/app/naver', body);
 
-      const res = await apiClient.post('/api/auth/app/kakao', body);
+      const res = await apiClient.post('/api/auth/app/naver', body);
       console.log('✅ server response:', res.data);
 
       if (res.data?.accessToken) {
@@ -88,7 +111,7 @@ export default function KakaoLoginWebView({
         await saveTokens({
           accessToken: res.data.accessToken,
           refreshToken: res.data.refreshToken,
-          loginType: 'kakao',
+          loginType: 'naver',
           user: res.data.user,
         });
 

@@ -5,10 +5,15 @@ import apiClient from './api';
 // 토큰 키 상수
 const ACCESS_TOKEN_KEY = 'auth_token';
 const REFRESH_TOKEN_KEY = 'refresh_token';
+const LOGIN_TYPE_KEY = 'login_type';
+
+// 로그인 타입 정의
+export type LoginType = 'email' | 'kakao' | 'google' | 'naver' | 'apple';
 
 export interface TokenData {
   accessToken: string;
   refreshToken: string;
+  loginType: LoginType;
   user?: any;
 }
 
@@ -26,8 +31,9 @@ export const saveTokens = async (tokenData: TokenData): Promise<void> => {
     await Promise.all([
       SecureStore.setItemAsync(ACCESS_TOKEN_KEY, tokenData.accessToken),
       SecureStore.setItemAsync(REFRESH_TOKEN_KEY, tokenData.refreshToken),
+      SecureStore.setItemAsync(LOGIN_TYPE_KEY, tokenData.loginType),
     ]);
-    console.log('✅ 토큰 저장 완료');
+    console.log('✅ 토큰 저장 완료 (로그인 타입:', tokenData.loginType, ')');
   } catch (error) {
     console.error('❌ 토큰 저장 실패:', error);
     throw error;
@@ -59,6 +65,19 @@ export const getRefreshToken = async (): Promise<string | null> => {
 };
 
 /**
+ * 로그인 타입 가져오기
+ */
+export const getLoginType = async (): Promise<LoginType | null> => {
+  try {
+    const loginType = await SecureStore.getItemAsync(LOGIN_TYPE_KEY);
+    return loginType as LoginType | null;
+  } catch (error) {
+    console.error('❌ 로그인 타입 가져오기 실패:', error);
+    return null;
+  }
+};
+
+/**
  * 토큰 갱신
  */
 export const refreshAccessToken = async (): Promise<boolean> => {
@@ -70,16 +89,16 @@ export const refreshAccessToken = async (): Promise<boolean> => {
     }
 
     console.log('🔄 토큰 갱신 시도...');
-    const response = await apiClient.post('/api/auth/refresh', {
+    const response = await apiClient.post('/users/me/access-token', {
       refreshToken: refreshToken,
     });
 
     if (response.data?.accessToken) {
-      await saveTokens({
-        accessToken: response.data.accessToken,
-        refreshToken: response.data.refreshToken,
-        user: response.data.user,
-      });
+      // 새로운 accessToken만 저장 (refreshToken은 그대로 유지)
+      await SecureStore.setItemAsync(
+        ACCESS_TOKEN_KEY,
+        response.data.accessToken
+      );
       console.log('✅ 토큰 갱신 성공');
       return true;
     }
@@ -99,6 +118,7 @@ export const clearTokens = async (): Promise<void> => {
     await Promise.all([
       SecureStore.deleteItemAsync(ACCESS_TOKEN_KEY),
       SecureStore.deleteItemAsync(REFRESH_TOKEN_KEY),
+      SecureStore.deleteItemAsync(LOGIN_TYPE_KEY),
     ]);
     console.log('✅ 토큰 삭제 완료');
   } catch (error) {
