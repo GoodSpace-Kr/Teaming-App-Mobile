@@ -108,8 +108,21 @@ export default function ChatMenuScreen() {
   };
 
   const handleCreateTask = () => {
-    // members 정보를 그대로 전달
-    const membersParam = members ? `&members=${members}` : '';
+    // participants 데이터를 과제 생성하기로 전달
+    const participantsData = participants.map((participant) => ({
+      memberId: participant.id,
+      name: participant.name.replace('(팀장)', ''), // 팀장 표시 제거
+      avatarUrl: participant.avatar?.uri || '',
+      avatarKey: participant.avatar?.uri || '',
+      roomRole: participant.name.includes('(팀장)') ? 'LEADER' : 'MEMBER',
+    }));
+
+    const membersParam =
+      participantsData.length > 0
+        ? `&members=${encodeURIComponent(JSON.stringify(participantsData))}`
+        : '';
+
+    console.log('🚀 과제 생성하기로 전달할 멤버 데이터:', participantsData);
     router.push(`/(tabs)/chats/create-task?roomId=${roomId}${membersParam}`);
   };
 

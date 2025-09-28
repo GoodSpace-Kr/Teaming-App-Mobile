@@ -11,6 +11,7 @@ import {
   TaskCancelRequest,
   TaskCancelResponse,
   TaskMember,
+  AssignmentSummary,
 } from '@/src/types/task';
 
 /**
@@ -64,6 +65,28 @@ export class TaskService {
       console.error('❌ API 에러:', error.response?.data);
       console.error('❌ 에러 상태:', error.response?.status);
       console.error('❌ 에러 헤더:', error.response?.headers);
+      throw error;
+    }
+  }
+
+  /**
+   * 홈화면용 과제 요약 정보 조회
+   * @returns 과제 요약 목록
+   */
+  static async getAssignmentSummaries(): Promise<AssignmentSummary[]> {
+    try {
+      console.log('🚀 과제 요약 정보 조회 API 요청');
+
+      const response = await apiClient.get<AssignmentSummary[]>(
+        '/rooms/assignments'
+      );
+
+      console.log('✅ 과제 요약 정보 조회 성공:', response.data);
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ 과제 요약 정보 조회 실패:', error);
+      console.error('❌ API 에러:', error.response?.data);
+      console.error('❌ 에러 상태:', error.response?.status);
       throw error;
     }
   }

@@ -17,11 +17,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { TaskService } from '@/src/services/taskService';
 import { CreateTaskRequest } from '@/src/types/task';
-import {
-  getRoomDetail,
-  getUserInfo,
-  RoomDetailResponse,
-} from '@/src/services/api';
+import { getUserInfo } from '@/src/services/api';
 
 const { width } = Dimensions.get('window');
 
@@ -47,7 +43,6 @@ export default function CreateTaskScreen() {
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [roomDetail, setRoomDetail] = useState<RoomDetailResponse | null>(null);
   const [currentUserName, setCurrentUserName] = useState<string>('');
 
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
@@ -67,55 +62,84 @@ export default function CreateTaskScreen() {
     loadCurrentUserInfo();
   }, []);
 
-  // 팀 멤버 정보 로드
+  // 팀 멤버 정보 로드 (상단메뉴에서 전달받은 정보만 사용)
   useEffect(() => {
-    const loadTeamMembers = async () => {
+    const loadTeamMembers = () => {
       if (!roomId) return;
 
       try {
         setIsLoading(true);
 
         // 1. 먼저 전달받은 members 정보가 있는지 확인
-        if (members) {
+        if (members && members.trim() !== '') {
           try {
             const membersData = JSON.parse(decodeURIComponent(members));
-            const teamMembersData: TeamMember[] = membersData.map(
-              (member: any) => ({
-                id: member.memberId,
-                name:
-                  member.roomRole === 'LEADER'
-                    ? `${member.name}(팀장)`
-                    : member.name,
-                avatar: getDefaultAvatar(member.memberId),
-                isSelected: false,
-              })
-            );
-            setTeamMembers(teamMembersData);
-            setIsLoading(false);
-            return;
+            console.log('📋 과제 생성 - 파싱된 members 데이터:', membersData);
+
+            if (Array.isArray(membersData) && membersData.length > 0) {
+              const teamMembersData: TeamMember[] = membersData.map(
+                (member: any) => ({
+                  id: member.memberId,
+                  name:
+                    member.roomRole === 'LEADER'
+                      ? `${member.name}(팀장)`
+                      : member.name,
+                  avatar: member.avatarUrl
+                    ? { uri: member.avatarUrl }
+                    : member.avatarKey
+                    ? { uri: member.avatarKey }
+                    : getDefaultAvatar(member.memberId),
+                  isSelected: false,
+                })
+              );
+              setTeamMembers(teamMembersData);
+              console.log(
+                '✅ 과제 생성 - 팀 멤버 데이터 설정 완료:',
+                teamMembersData
+              );
+              setIsLoading(false);
+              return;
+            } else {
+              console.warn('⚠️ members 데이터가 빈 배열이거나 유효하지 않음');
+              throw new Error('Invalid members data');
+            }
           } catch (parseError) {
             console.error('❌ members 파싱 실패:', parseError);
+            console.log('🔄 기본 멤버 정보로 폴백');
+            // 기본 멤버 정보 사용하도록 계속 진행
           }
+        } else {
+          console.warn('⚠️ members 파라미터가 없거나 비어있음');
         }
 
-        // 2. members 정보가 없거나 파싱 실패 시 API 호출
-        const roomData = await getRoomDetail(Number(roomId));
-        setRoomDetail(roomData);
-
-        // API에서 받은 멤버 정보를 UI용으로 변환
-        const teamMembersData: TeamMember[] = roomData.members.map(
-          (member) => ({
-            id: member.memberId,
-            name:
-              member.roomRole === 'LEADER'
-                ? `${member.name}(팀장)`
-                : member.name,
-            avatar: getDefaultAvatar(member.memberId), // 기본 아바타 매핑
+        // 2. members 정보가 없는 경우 기본 멤버 정보 사용
+        console.warn('⚠️ members 정보가 없음 - 기본 멤버 정보 사용');
+        setTeamMembers([
+          {
+            id: 1,
+            name: '최순조(팀장)',
+            avatar: require('../../../assets/images/(chattingRoom)/choi.png'),
             isSelected: false,
-          })
-        );
-
-        setTeamMembers(teamMembersData);
+          },
+          {
+            id: 2,
+            name: '권민석',
+            avatar: require('../../../assets/images/(chattingRoom)/me.png'),
+            isSelected: false,
+          },
+          {
+            id: 3,
+            name: '정치학존잘남',
+            avatar: require('../../../assets/images/(chattingRoom)/politicMan.png'),
+            isSelected: false,
+          },
+          {
+            id: 4,
+            name: '팀플하기싫다',
+            avatar: require('../../../assets/images/(chattingRoom)/noTeample.png'),
+            isSelected: false,
+          },
+        ]);
       } catch (error) {
         console.error('❌ 팀 정보 로드 실패:', error);
         // 에러 발생 시 기본 멤버 정보 사용
