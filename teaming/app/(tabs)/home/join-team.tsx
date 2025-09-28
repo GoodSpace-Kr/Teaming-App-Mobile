@@ -104,15 +104,9 @@ export default function JoinTeamScreen() {
       // Modal 닫기
       router.dismiss();
 
-      // 채팅방 목록으로 이동 (새로운 방이 목록에 추가됨)
+      // 채팅방 목록으로 이동 (결제가 필요한 경우 결제 로직 실행)
       setTimeout(() => {
         router.push('/(tabs)/chats');
-        // 참여한 채팅방으로 바로 이동
-        setTimeout(() => {
-          router.push(
-            `/(tabs)/chats/chat-room/${joinResponse.roomId}?role=${joinResponse.role}`
-          );
-        }, 100);
       }, 100);
     } catch (error: any) {
       console.error('❌ 팀 참여 실패:', error);
