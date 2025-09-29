@@ -37,7 +37,7 @@ import {
   getUserInfo,
   type ChatMessage as ApiChatMessage,
 } from '@/src/services/api';
-
+import FileChatBubble from '@/src/components/FileChatBubble';
 const { width, height } = Dimensions.get('window');
 
 interface Message {
@@ -372,9 +372,9 @@ export default function ChatRoomScreen() {
     const formattedAttachments = (msg.attachments || []).map(
       (attachment: any) => ({
         fileId: attachment.fileId,
-        fileName: msg.content, // msg.content에서 파일명 가져오기
-        contentType: attachment.mimeType,
-        size: attachment.byteSize,
+        name: attachment.name, // attachment.name 사용
+        mimeType: attachment.mimeType,
+        byteSize: attachment.byteSize, // byteSize 사용
       })
     );
 
@@ -799,9 +799,8 @@ export default function ChatRoomScreen() {
 
     // 사용자 정보 표시: 첫 번째 메시지이거나 다른 사람이거나 다른 시간대
     const showUserInfo = !isContinuous && !message.isMe;
-
-    // 꼬리 표시: 다른 사람의 첫 번째 메시지 (연속 메시지가 아닌 경우)
     const showTail = !message.isMe && !isContinuous;
+    const isFileLike = (message.attachments?.length ?? 0) > 0;
 
     return (
       <View key={message.id} style={styles.messageContainer}>
@@ -812,17 +811,29 @@ export default function ChatRoomScreen() {
           </View>
         )}
 
-        <ChatBubble
-          text={message.text}
-          isMe={message.isMe}
-          showTail={showTail}
-          isContinuous={isContinuous}
-          timestamp={message.timestamp}
-          attachments={message.attachments}
-          // readCount={message.readCount} // 주석 처리 (나중에 사용 예정)
-          backgroundColor={message.isMe ? '#007AFF' : '#121216'}
-          textColor="#FFFFFF"
-        />
+        {isFileLike ? (
+          <FileChatBubble
+            attachments={message.attachments!}
+            isMe={message.isMe}
+            showTail={showTail}
+            isContinuous={isContinuous}
+            timestamp={message.timestamp}
+            backgroundColor={message.isMe ? '#007AFF' : '#121216'}
+            textColor="#FFFFFF"
+          />
+        ) : (
+          <ChatBubble
+            text={message.text}
+            isMe={message.isMe}
+            showTail={showTail}
+            isContinuous={isContinuous}
+            timestamp={message.timestamp}
+            attachments={message.attachments}
+            // readCount={message.readCount} // 주석 처리 (나중에 사용 예정)
+            backgroundColor={message.isMe ? '#007AFF' : '#121216'}
+            textColor="#FFFFFF"
+          />
+        )}
       </View>
     );
   };

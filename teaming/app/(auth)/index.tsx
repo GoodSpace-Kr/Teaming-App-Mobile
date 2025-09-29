@@ -37,7 +37,7 @@ export default function LoginScreen() {
         {/* 상단 로고 섹션 */}
         <View style={styles.logoSection}>
           <Image
-            source={require('../../assets/images/(beforeLogin)/Icon.png')}
+            source={require('../../assets/images/tmlogo.png')}
             style={styles.logo}
           />
           <Text style={styles.appName}>Teaming</Text>
@@ -151,11 +151,14 @@ export default function LoginScreen() {
                 <Text style={styles.reviewIcon}>😊</Text>
                 <View style={styles.reviewUserInfo}>
                   <Text style={styles.reviewUserName}>권민석님</Text>
-                  <Text style={styles.reviewUserSchool}>숭실대학교 컴</Text>
+                  <Text style={styles.reviewUserSchool}>
+                    숭실대학교 컴퓨터공학과
+                  </Text>
                 </View>
               </View>
               <Text style={styles.reviewText}>
-                과제할때, 결과물을 공유 사람들의 강제성을 어떻게
+                과제할때, 결과물을 공유 사람들의 강제성을 어떻게 줘야할지
+                고민이었는데 티밍이 도움이 되었어요.
               </Text>
             </View>
           </ScrollView>
@@ -204,7 +207,6 @@ const styles = StyleSheet.create({
   logo: {
     width: 40,
     height: 40,
-    marginRight: 12,
   },
   appName: {
     fontSize: 24,
@@ -245,7 +247,7 @@ const styles = StyleSheet.create({
   // 웨이브 배경
   waveContainer: {
     position: 'absolute',
-    top: 0,
+    top: -50,
     left: 0,
     right: 0,
     height: height * 0.6,

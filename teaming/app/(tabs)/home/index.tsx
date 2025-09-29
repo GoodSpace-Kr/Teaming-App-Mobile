@@ -136,7 +136,7 @@ export default function HomeScreen() {
         <View style={styles.header}>
           <View style={styles.logoAndTitle}>
             <Image
-              source={require('../../../assets/images/logo.png')}
+              source={require('../../../assets/images/tmlogo.png')}
               style={styles.logo}
             />
             <Text style={styles.appTitle}>Teaming</Text>
@@ -328,10 +328,9 @@ const styles = StyleSheet.create({
   logo: {
     width: 50,
     height: 50,
-    marginRight: 12,
   },
   appTitle: {
-    fontSize: 42,
+    fontSize: 30,
     fontWeight: 'bold',
     color: '#FFFFFF',
     lineHeight: 50, // 로고 높이와 맞춤
