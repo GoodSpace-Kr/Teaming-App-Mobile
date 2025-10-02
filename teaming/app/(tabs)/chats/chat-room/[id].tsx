@@ -14,6 +14,7 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StatusBar } from 'expo-status-bar';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -103,6 +104,8 @@ export default function ChatRoomScreen() {
   const [currentUserName, setCurrentUserName] = useState<string>('');
   const [isTeamCompleted, setIsTeamCompleted] = useState(false);
   const [actualMembers, setActualMembers] = useState<any[]>([]);
+  const [showTeamCompleteModal, setShowTeamCompleteModal] = useState(false);
+  const [teamCompleteTeamName, setTeamCompleteTeamName] = useState<string>('');
   const scrollViewRef = useRef<ScrollView>(null);
 
   // JWT 토큰에서 사용자 ID 추출하는 함수
@@ -224,7 +227,7 @@ export default function ChatRoomScreen() {
     loadCurrentUserInfo();
   }, []);
 
-  // role 및 success 정보 로깅
+  // role 및 success 정보 로깅 및 팀플 완료 모달 처리
   useEffect(() => {
     if (role) {
       console.log('👑 채팅방에서 사용자 역할:', role);
@@ -235,8 +238,37 @@ export default function ChatRoomScreen() {
       const isCompleted = success === 'true';
       setIsTeamCompleted(isCompleted);
       console.log('🏠 채팅방 완료 상태:', isCompleted);
+
+      // 팀플이 완료된 경우 모달 표시 여부 확인
+      if (isCompleted) {
+        checkAndShowSuccessModal();
+      }
     }
   }, [role, id, success]);
+
+  // 팀플 완료 모달 표시 여부 확인 및 표시
+  const checkAndShowSuccessModal = async () => {
+    try {
+      const storageKey = `success_modal_${id}`;
+      const hasSeenModal = await AsyncStorage.getItem(storageKey);
+
+      if (!hasSeenModal) {
+        // 아직 모달을 보지 않은 경우에만 표시
+        console.log('🎉 팀플 완료 모달 표시');
+        setTeamCompleteTeamName(
+          title ? decodeURIComponent(title) : '정치학 발표'
+        );
+        setShowTeamCompleteModal(true);
+
+        // 모달을 봤다는 기록 저장
+        await AsyncStorage.setItem(storageKey, 'true');
+      } else {
+        console.log('📝 이미 팀플 완료 모달을 본 채팅방');
+      }
+    } catch (error) {
+      console.error('❌ 팀플 완료 모달 체크 실패:', error);
+    }
+  };
 
   // 채팅방 정보 로드
   useEffect(() => {
