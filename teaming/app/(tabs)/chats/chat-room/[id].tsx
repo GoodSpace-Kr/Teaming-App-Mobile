@@ -69,6 +69,25 @@ export default function ChatRoomScreen() {
   }>();
   const [inputText, setInputText] = useState('');
   const [showFileMenu, setShowFileMenu] = useState(false);
+
+  // 텍스트 입력창 높이 계산
+  const getInputHeight = (text: string) => {
+    const baseHeight = 44; // 기본 높이
+    const lineHeight = 22; // 한 줄 높이
+    const maxLines = 4; // 최대 줄 수
+
+    if (!text) return baseHeight;
+
+    // 줄바꿈 개수 계산
+    const lineBreaks = (text.match(/\n/g) || []).length;
+    // 텍스트 길이로 대략적인 줄 수 계산 (한 줄당 약 20자)
+    const estimatedLines = Math.ceil(text.length / 20);
+    const totalLines = Math.max(lineBreaks + 1, estimatedLines);
+
+    const calculatedHeight =
+      baseHeight + Math.min(totalLines - 1, maxLines - 1) * lineHeight;
+    return Math.min(calculatedHeight, baseHeight + (maxLines - 1) * lineHeight);
+  };
   const [jwt, setJwt] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
@@ -929,13 +948,14 @@ export default function ChatRoomScreen() {
           </TouchableOpacity>
 
           <TextInput
-            style={styles.textInput}
+            style={[styles.textInput, { height: getInputHeight(inputText) }]}
             value={inputText}
             onChangeText={setInputText}
             placeholder="메시지를 입력하세요"
             placeholderTextColor="#666666"
             multiline
             maxLength={500}
+            textAlignVertical="top"
           />
 
           <TouchableOpacity
@@ -1113,6 +1133,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 8,
+    marginBottom: 7,
     borderWidth: 1,
     borderColor: '#292929',
   },
@@ -1123,16 +1144,18 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#292929',
     paddingHorizontal: 16,
-    paddingVertical: 8,
-    fontSize: 12,
+    paddingVertical: 12,
+    fontSize: 16,
     color: '#FFFFFF',
-    maxHeight: 50,
+    minHeight: 44, // 최소 높이 설정
+    maxHeight: 132, // 최대 높이 설정 (3줄 정도)
     marginRight: 12,
   },
   sendButton: {
     width: 30,
     height: 30,
     borderRadius: 20,
+    marginBottom: 7,
     alignItems: 'center',
     justifyContent: 'center',
   },

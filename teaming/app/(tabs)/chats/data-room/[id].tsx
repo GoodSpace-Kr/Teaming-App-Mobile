@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,12 +9,13 @@ import {
   Dimensions,
   Alert,
   Linking,
+  ActivityIndicator,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { FileService } from '@/src/services/fileService';
-import { FileItem } from '@/src/types/file';
+import { FileItem, RoomFileResponse } from '@/src/types/file';
 
 const { width } = Dimensions.get('window');
 
@@ -22,82 +23,43 @@ const { width } = Dimensions.get('window');
 
 export default function DataRoomScreen() {
   const { id } = useLocalSearchParams();
+  const roomId = parseInt(id as string, 10);
 
-  // 목데이터 - 실제 API 연동 시 대체 (채팅에서 공유된 파일들만)
-  const [files] = useState<FileItem[]>([
-    {
-      id: '1',
-      name: '정치학_발표자료.pptx',
-      size: 5242880, // 5MB
-      type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-      uploadedBy: '팀장 최순조',
-      uploadedAt: '2025년 09월 05일 14:30',
-      fileIcon: 'document-text',
-    },
-    {
-      id: '2',
-      name: '회의록_0905.hwp',
-      size: 1048576, // 1MB
-      type: 'application/x-hwp',
-      uploadedBy: '정치학존잘남',
-      uploadedAt: '2025년 09월 05일 15:20',
-      fileIcon: 'document-text',
-    },
-    {
-      id: '3',
-      name: '발표_스크립트.txt',
-      size: 51200, // 50KB
-      type: 'text/plain',
-      uploadedBy: '팀플하기싫다',
-      uploadedAt: '2025년 09월 06일 10:15',
-      fileIcon: 'document-text',
-    },
-    {
-      id: '4',
-      name: '정치학_이미지1.jpg',
-      size: 3145728, // 3MB
-      type: 'image/jpeg',
-      uploadedBy: '권민석',
-      uploadedAt: '2025년 09월 06일 17:30',
-      fileIcon: 'image',
-    },
-    {
-      id: '5',
-      name: '정치학_이미지2.png',
-      size: 2097152, // 2MB
-      type: 'image/png',
-      uploadedBy: '정치학존잘남',
-      uploadedAt: '2025년 09월 06일 18:45',
-      fileIcon: 'image',
-    },
-    {
-      id: '6',
-      name: '발표_동영상.mp4',
-      size: 52428800, // 50MB
-      type: 'video/mp4',
-      uploadedBy: '팀장 최순조',
-      uploadedAt: '2025년 09월 07일 09:00',
-      fileIcon: 'videocam',
-    },
-    {
-      id: '7',
-      name: '참고_논문.pdf',
-      size: 1572864, // 1.5MB
-      type: 'application/pdf',
-      uploadedBy: '권민석',
-      uploadedAt: '2025년 09월 07일 11:20',
-      fileIcon: 'document',
-    },
-    {
-      id: '8',
-      name: '팀_로고.png',
-      size: 512000, // 500KB
-      type: 'image/png',
-      uploadedBy: '팀플하기싫다',
-      uploadedAt: '2025년 09월 07일 14:30',
-      fileIcon: 'image',
-    },
-  ]);
+  // 상태 관리
+  const [files, setFiles] = useState<FileItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // 파일 목록 로드
+  useEffect(() => {
+    loadFiles();
+  }, [roomId]);
+
+  const loadFiles = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      console.log('📁 자료실 파일 목록 로드 시작:', { roomId });
+
+      const roomFiles = await FileService.getRoomFiles(roomId);
+      const convertedFiles = roomFiles.map((roomFile) =>
+        FileService.convertRoomFileToFileItem(roomFile)
+      );
+
+      setFiles(convertedFiles);
+      console.log(
+        '✅ 자료실 파일 목록 로드 완료:',
+        convertedFiles.length,
+        '개 파일'
+      );
+    } catch (err: any) {
+      console.error('❌ 자료실 파일 목록 로드 실패:', err);
+      setError('파일 목록을 불러오는데 실패했습니다.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleBackPress = () => {
     router.back();
@@ -119,7 +81,7 @@ export default function DataRoomScreen() {
           Alert.alert('오류', '이 파일을 열 수 없습니다.');
         }
       } else {
-        // 목데이터인 경우 파일 정보만 표시
+        // 파일 ID가 없는 경우 파일 정보만 표시
         Alert.alert(
           '파일 정보',
           `파일명: ${file.name}\n크기: ${FileService.formatFileSize(
@@ -149,7 +111,7 @@ export default function DataRoomScreen() {
     >
       <View style={styles.fileIconContainer}>
         <Ionicons
-          name={FileService.getFileIcon(file.type) as any}
+          name={file.fileIcon as any}
           size={24}
           color={FileService.getFileIconColor(file.type)}
         />
@@ -191,10 +153,25 @@ export default function DataRoomScreen() {
             <Ionicons name="folder" size={20} color="#007AFF" />
             <Text style={styles.sectionTitle}>채팅 파일 ({files.length})</Text>
           </View>
-          {files.length > 0 ? (
+
+          {loading ? (
+            <View style={styles.loadingSection}>
+              <ActivityIndicator size="large" color="#007AFF" />
+              <Text style={styles.loadingText}>파일 목록을 불러오는 중...</Text>
+            </View>
+          ) : error ? (
+            <View style={styles.errorSection}>
+              <Ionicons name="alert-circle" size={48} color="#FF3B30" />
+              <Text style={styles.errorText}>{error}</Text>
+              <TouchableOpacity style={styles.retryButton} onPress={loadFiles}>
+                <Text style={styles.retryButtonText}>다시 시도</Text>
+              </TouchableOpacity>
+            </View>
+          ) : files.length > 0 ? (
             files.map(renderFileItem)
           ) : (
             <View style={styles.emptySection}>
+              <Ionicons name="folder-open" size={48} color="#666666" />
               <Text style={styles.emptyText}>공유된 파일이 없습니다</Text>
             </View>
           )}
@@ -304,5 +281,37 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 14,
     color: '#666666',
+    marginTop: 12,
+  },
+  loadingSection: {
+    alignItems: 'center',
+    paddingVertical: 32,
+  },
+  loadingText: {
+    fontSize: 14,
+    color: '#CCCCCC',
+    marginTop: 12,
+  },
+  errorSection: {
+    alignItems: 'center',
+    paddingVertical: 32,
+  },
+  errorText: {
+    fontSize: 14,
+    color: '#FF3B30',
+    marginTop: 12,
+    textAlign: 'center',
+  },
+  retryButton: {
+    backgroundColor: '#007AFF',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+    marginTop: 16,
+  },
+  retryButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '500',
   },
 });
