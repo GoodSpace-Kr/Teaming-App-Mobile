@@ -45,8 +45,10 @@ export default function TeamCompletionSuccessModal({
             성공적으로 완료하였습니다.
           </Text>
 
-          {/* 축하 메시지 */}
-          <Text style={styles.congratulations}>🎉 수고하셨습니다! 🎉</Text>
+          {/* 환급 안내 */}
+          <Text style={styles.refundMessage}>
+            💰 결제한 금액이 모두 환급되셨습니다.
+          </Text>
 
           {/* 확인 버튼 */}
           <TouchableOpacity style={styles.confirmButton} onPress={onClose}>
@@ -96,6 +98,19 @@ const styles = StyleSheet.create({
   teamName: {
     color: '#4CAF50',
     fontWeight: '600',
+  },
+  refundMessage: {
+    fontSize: 16,
+    color: '#4CAF50',
+    textAlign: 'center',
+    marginBottom: 16,
+    fontWeight: '500',
+    backgroundColor: 'rgba(76, 175, 80, 0.1)',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(76, 175, 80, 0.3)',
   },
   congratulations: {
     fontSize: 20,

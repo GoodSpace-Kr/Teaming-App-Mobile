@@ -201,6 +201,25 @@ export default function ChatMenuScreen() {
         console.log('✅ 직접 API 호출 성공:', response.data);
       }
 
+      // 결제 취소 API 호출
+      try {
+        console.log('💳 결제 취소 API 호출 시작:', { roomId });
+        const cancelResponse = await apiService.default.post(
+          `/payment/cancelAuth`,
+          { roomId: Number(roomId) },
+          {
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          }
+        );
+        console.log('✅ 결제 취소 API 호출 성공:', cancelResponse.data);
+      } catch (cancelError: any) {
+        console.error('❌ 결제 취소 API 호출 실패:', cancelError);
+        // 결제 취소 실패해도 팀플 완료는 진행되도록 함
+        console.log('⚠️ 결제 취소 실패했지만 팀플 완료는 계속 진행');
+      }
+
       // 성공 모달 표시
       setShowSuccessModal(true);
     } catch (error: any) {
