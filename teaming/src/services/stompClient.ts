@@ -1,21 +1,16 @@
-// React Native STOMP over SockJS client for Teaming
-// 서버(Spring) 설정 매칭:
-//  - SockJS 엔드포인트: https://teamingkr.duckdns.org/api/ws-sockjs
-//  - SUBSCRIBE: /topic/rooms/{roomId}
-//  - SEND     : /app/rooms/{roomId}/send
-//  - CONNECT/SUBSCRIBE/SEND 모두 Authorization 포함
-
+// /src/services/stompClient.ts
 import { Client, IMessage, StompSubscription } from '@stomp/stompjs';
-// @ts-ignore - sockjs-client 타입 정의 없음
-import SockJS from 'sockjs-client/dist/sockjs'; // RN 호환 번들
+// @ts-ignore
+import SockJS from 'sockjs-client/dist/sockjs';
 import {
   getAccessToken,
   refreshAccessToken,
 } from '@/src/services/tokenManager';
 
 // ====== 고정값 ======
-const HTTP_BASE = 'https://teamingkr.duckdns.org/api'; // 필요시 https로 교체
-const SOCKJS_ENDPOINT = `${HTTP_BASE.replace(/\/+$/, '')}/ws-sockjs`;
+const ORIGIN_BASE = 'https://teamingkr.duckdns.org';
+const SOCKJS_ENDPOINT = `${ORIGIN_BASE}/api/ws-sockjs`; // 서버 엔드포인트와 동일
+
 const SUB_PREFIX = '/topic/rooms/';
 const SEND_PREFIX = '/app/rooms/';
 
@@ -38,13 +33,12 @@ export interface ChatMessage {
   roomId?: number;
   clientMessageId?: string;
   type?: ChatMessageType;
-  content?: string;
+  content?: string | null;
   createdAt?: string;
   sender?: ChatSender;
   attachments?: any[];
   [k: string]: any;
 }
-
 export interface ReadBoundaryUpdate {
   roomId?: number;
   userId: number;
@@ -55,165 +49,183 @@ export interface ReadBoundaryUpdate {
 // ====== 내부 상태 ======
 let client: Client | null = null;
 let currentToken: string | null = null;
-let connected = false;
-let triedRefreshOnClose = false;
 let subs: Record<string, StompSubscription> = {};
+let triedRefreshOnClose = false;
+let isActive = false;
+let connectingPromise: Promise<void> | null = null;
 
 // ====== 유틸 ======
+const authHeaders = (): Record<string, string> =>
+  currentToken ? { Authorization: `Bearer ${currentToken}` } : {};
+
 const ensureClient = () => {
   if (!client)
     throw new Error('WS client not initialized. Call connectSock() first.');
   return client!;
 };
-const authHeaders = (): Record<string, string> => {
-  const v = currentToken ? `Bearer ${currentToken}` : '';
-  return v ? { Authorization: v, authorization: v } : {};
-};
+
+// SockJS 세션 캐시 회피용
+const makeSessionId = () =>
+  `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+
+// 쿼리 토큰 포함 URL
+const sockUrlWithToken = (token: string) =>
+  `${SOCKJS_ENDPOINT}?token=${encodeURIComponent(token)}`;
 
 // ====== 연결 ======
 export async function connectSock(token?: string) {
-  if (connected && client?.active) return;
+  if (connectingPromise) return connectingPromise;
 
-  currentToken = token ?? (await getAccessToken());
-  if (!currentToken) throw new Error('No access token');
-
-  if (client) {
+  connectingPromise = (async () => {
     try {
-      await client.deactivate();
-    } catch {}
-    client = null;
-  }
-  subs = {};
-  triedRefreshOnClose = false;
+      currentToken = token ?? (await getAccessToken());
+      if (!currentToken) {
+        console.warn('[STOMP] No access token available');
+        return;
+      }
+    } catch (e) {
+      console.warn('[STOMP] Token fetch failed:', e);
+      return;
+    }
 
-  // RN에서도 사용 가능한 SockJS 인스턴스 생성
-  const socketFactory = () =>
-    // transports 지정: 안정적인 순서로 변경 (xhr-polling->xhr-streaming->websocket)
-    new SockJS(SOCKJS_ENDPOINT, null, {
-      transports: ['xhr-polling', 'xhr-streaming', 'websocket'],
+    // 기존 클라 정리
+    if (client) {
+      try {
+        await client.deactivate();
+      } catch {}
+      client = null;
+    }
+    subs = {};
+    triedRefreshOnClose = false;
+    isActive = false;
+
+    const socketFactory = () =>
+      new SockJS(sockUrlWithToken(currentToken!), null, {
+        transports: ['websocket', 'xhr-streaming', 'xhr-polling'],
+        sessionId: makeSessionId,
+      });
+
+    client = new Client({
+      webSocketFactory: socketFactory as any,
+
+      // CONNECT 프레임 (서버가 사용하지 않더라도 유지 가능)
+      connectHeaders: {
+        'accept-version': '1.2,1.1,1.0',
+        ...authHeaders(),
+      } as any,
+
+      heartbeatIncoming: 15000,
+      heartbeatOutgoing: 15000,
+      reconnectDelay: 3000,
+      debug: (m) => console.log('[STOMP]', m),
+
+      beforeConnect: () => {
+        console.log('[STOMP] connecting…', {
+          endpoint: sockUrlWithToken(currentToken!),
+        });
+      },
+
+      onConnect: (frame) => {
+        console.log('[STOMP] CONNECTED:', frame.headers);
+        triedRefreshOnClose = false;
+        isActive = true;
+      },
+
+      onStompError: (frame) => {
+        console.warn(
+          '[STOMP] STOMP ERROR:',
+          frame.headers?.message,
+          frame.body
+        );
+      },
+
+      onWebSocketError: (e) => {
+        console.warn('[STOMP] WS ERROR:', e);
+      },
+
+      onWebSocketClose: async (evt) => {
+        console.warn(
+          '[STOMP] WS CLOSED:',
+          evt?.code,
+          evt?.reason || '(no reason)'
+        );
+        isActive = false;
+
+        // 최초 1회 토큰 리프레시 후 재접속 시도
+        if (!triedRefreshOnClose) {
+          triedRefreshOnClose = true;
+          try {
+            console.log('🔄 토큰 갱신 시도...');
+            const ok = await refreshAccessToken();
+            if (ok) {
+              currentToken = await getAccessToken();
+              const c = ensureClient();
+
+              // 새 토큰으로 URL 갱신을 위해 재활성화
+              try {
+                await c.deactivate();
+              } catch {}
+              isActive = false;
+              triedRefreshOnClose = false;
+              c.webSocketFactory = () =>
+                new SockJS(sockUrlWithToken(currentToken!), null, {
+                  transports: ['websocket', 'xhr-streaming', 'xhr-polling'],
+                  sessionId: makeSessionId,
+                });
+              c.connectHeaders = {
+                ...(c.connectHeaders || {}),
+                ...authHeaders(),
+              } as any;
+              c.activate();
+              return;
+            }
+          } catch (e) {
+            console.warn('🔄 토큰 갱신 실패:', e);
+          }
+        }
+        // 이후 재연결은 stomp-js의 reconnectDelay에 맡김
+      },
     });
 
-  client = new Client({
-    // ✅ SockJS를 STOMP 클라이언트의 소켓으로 사용
-    webSocketFactory: socketFactory as any,
+    // 1회 연결 대기(최대 15초)
+    const waitOnce = new Promise<void>((resolve) => {
+      const timeout = setTimeout(() => {
+        console.log('⏰ STOMP connect wait timeout (auto-retry in background)');
+        resolve();
+      }, 15000);
 
-    // ✅ CONNECT 헤더에 토큰(대/소문자 둘 다) + host
-    connectHeaders: {
-      host: 'teamingkr.duckdns.org',
-      'accept-version': '1.2,1.1,1.0',
-      ...authHeaders(),
-    } as any,
+      const originalOnConnect = client!.onConnect;
+      client!.onConnect = (f) => {
+        clearTimeout(timeout);
+        originalOnConnect?.(f);
+        resolve();
+      };
+    });
 
-    // 하트비트 활성화로 연결 안정성 향상
-    heartbeatIncoming: 10000,
-    heartbeatOutgoing: 10000,
-
-    reconnectDelay: 2000, // 재연결 지연 시간 단축 (5초 → 2초)
-
-    debug: (msg) => console.log('[STOMP/SockJS]', msg),
-
-    beforeConnect: () => {
-      console.log('[STOMP/SockJS] connecting...');
-    },
-
-    onConnect: (frame) => {
-      connected = true;
-      triedRefreshOnClose = false; // 연결 성공 시 재시도 플래그 리셋
-      console.log('[STOMP/SockJS] CONNECTED:', frame.headers);
-    },
-
-    onStompError: (frame) => {
-      console.warn(
-        '[STOMP/SockJS] STOMP ERROR:',
-        frame.headers?.message,
-        frame.body
-      );
-    },
-
-    onWebSocketError: (e) => {
-      console.warn('[STOMP/SockJS] WS ERROR:', e);
-    },
-
-    onWebSocketClose: async (evt) => {
-      connected = false;
-      console.warn(
-        '[STOMP/SockJS] WS CLOSED:',
-        evt?.code,
-        evt?.reason || '(no reason)'
-      );
-
-      // 최초 1회 토큰 갱신 후 재연결 시도
-      if (!triedRefreshOnClose) {
-        triedRefreshOnClose = true;
-        try {
-          const ok = await refreshAccessToken();
-          if (ok) {
-            currentToken = await getAccessToken();
-            const c = ensureClient();
-            c.connectHeaders = {
-              ...(c.connectHeaders || {}),
-              ...authHeaders(),
-            } as any;
-            c.activate();
-            return;
-          }
-        } catch {}
-      }
-      // 이후는 reconnectDelay에 따라 자동 재시도
-    },
-  });
-
-  console.log('[STOMP/SockJS] Starting connection...');
-  client.activate();
-
-  // 연결 완료를 기다림 (에러 없이 조용한 재시도)
-  return new Promise<void>((resolve) => {
-    const timeout = setTimeout(() => {
-      console.log('⏰ 웹소켓 연결 시간 초과 - 백그라운드에서 재시도 중...');
-      // 에러를 던지지 않고 조용히 resolve (백그라운드에서 재연결 시도)
-      client!.onConnect = originalOnConnect; // 원래 핸들러 복원
-      resolve();
-    }, 15000); // 10초 → 15초로 증가
-
-    const onConnectSuccess = () => {
-      clearTimeout(timeout);
-      client!.onConnect = originalOnConnect; // 원래 핸들러 복원
-      resolve();
-    };
-
-    const onConnectError = (error: any) => {
-      clearTimeout(timeout);
-      console.log(
-        '🔄 웹소켓 연결 실패 - 백그라운드에서 재시도 중...',
-        error.message || error
-      );
-      // 에러를 던지지 않고 조용히 resolve (백그라운드에서 재연결 시도)
-      client!.onWebSocketError = originalOnError; // 원래 핸들러 복원
-      resolve();
-    };
-
-    // 원래 핸들러 저장
-    const originalOnConnect = client!.onConnect;
-    const originalOnError = client!.onWebSocketError;
-
-    // 임시 핸들러 설정
-    client!.onConnect = onConnectSuccess;
-    client!.onWebSocketError = onConnectError;
-
-    // 이미 연결되어 있다면 즉시 resolve
-    if (client!.connected) {
-      onConnectSuccess();
+    try {
+      if (!isActive) client.activate();
+    } catch (e) {
+      console.warn('[STOMP] activate() threw:', e);
     }
-  });
+
+    await waitOnce;
+  })();
+
+  try {
+    await connectingPromise;
+  } finally {
+    connectingPromise = null;
+  }
 }
 
 export async function disconnectSock() {
   const c = ensureClient();
   try {
     Object.values(subs).forEach((s) => s.unsubscribe());
-    subs = {};
   } catch {}
-  connected = false;
+  subs = {};
+  triedRefreshOnClose = false;
+  isActive = false;
   await c.deactivate();
 }
 
@@ -233,37 +245,41 @@ export function subscribeRoomSock(
   onMessage: (m: ChatMessage, raw: IMessage) => void
 ): () => void {
   const c = ensureClient();
+
   if (!c.connected) {
-    console.warn('[STOMP/SockJS] Not connected yet, waiting for connection...');
-    // 연결 대기 후 재시도
-    const retrySubscribe = (): (() => void) => {
+    console.warn('[STOMP] Not connected yet, waiting…');
+    let cancelled = false;
+    const tryLater = () => {
+      if (cancelled) return;
       if (c.connected) {
-        return subscribeRoomSock(roomId, onMessage);
-      } else {
-        setTimeout(() => retrySubscribe(), 1000);
-        return () => {}; // 임시 unsubscribe 함수
+        const unsub = subscribeRoomSock(roomId, onMessage);
+        return;
       }
+      setTimeout(tryLater, 500);
     };
-    return retrySubscribe();
+    tryLater();
+    return () => {
+      cancelled = true;
+    };
   }
 
-  // 중복 제거
   if (subs[String(roomId)]) {
-    subs[String(roomId)].unsubscribe();
+    try {
+      subs[String(roomId)].unsubscribe();
+    } catch {}
     delete subs[String(roomId)];
   }
 
   const destination = `${SUB_PREFIX}${roomId}`;
-  console.log('[STOMP/SockJS] 구독 시작:', destination);
+  console.log('[STOMP] SUBSCRIBE:', destination);
 
   const sub = c.subscribe(
     destination,
     (msg) => {
       try {
-        console.log('[STOMP/SockJS] 메시지 수신:', msg.body);
         onMessage(JSON.parse(msg.body) as ChatMessage, msg);
-      } catch (error) {
-        console.warn('[STOMP/SockJS] 메시지 파싱 실패:', error);
+      } catch (e) {
+        console.warn('[STOMP] message parse failed, delivering raw text');
         onMessage(
           {
             messageId: Date.now(),
@@ -278,67 +294,60 @@ export function subscribeRoomSock(
       }
     },
     {
-      // ✅ SUBSCRIBE 프레임에도 토큰 주입
+      // CONNECT가 성립된 뒤의 프레임에는 Authorization을 덧붙여도 OK
       ...authHeaders(),
     } as any
   );
 
   subs[String(roomId)] = sub;
-  console.log('[STOMP/SockJS] 구독 완료:', destination);
-
   return () => {
     try {
       sub.unsubscribe();
-      console.log('[STOMP/SockJS] 구독 해제:', destination);
     } catch {}
     delete subs[String(roomId)];
   };
 }
 
-// 읽음 경계 업데이트 구독
 export function subscribeRoomReadBoundary(
   roomId: number,
   onUpdate: (update: ReadBoundaryUpdate) => void
 ): () => void {
   const c = ensureClient();
+
   if (!c.connected) {
-    console.warn('[STOMP/SockJS] Not connected yet, waiting for connection...');
-    const retrySubscribe = (): (() => void) => {
+    console.warn('[STOMP] Not connected yet, waiting (read)…');
+    let cancelled = false;
+    const tryLater = () => {
+      if (cancelled) return;
       if (c.connected) {
-        return subscribeRoomReadBoundary(roomId, onUpdate);
-      } else {
-        setTimeout(() => retrySubscribe(), 1000);
-        return () => {};
+        const unsub = subscribeRoomReadBoundary(roomId, onUpdate);
+        return;
       }
+      setTimeout(tryLater, 500);
     };
-    return retrySubscribe();
+    tryLater();
+    return () => {
+      cancelled = true;
+    };
   }
 
   const destination = `${SUB_PREFIX}${roomId}/read`;
-  console.log('[STOMP/SockJS] 읽음 경계 구독 시작:', destination);
+  console.log('[STOMP] SUBSCRIBE(read):', destination);
 
   const sub = c.subscribe(
     destination,
     (msg) => {
       try {
-        console.log('[STOMP/SockJS] 읽음 경계 업데이트 수신:', msg.body);
-        const update = JSON.parse(msg.body) as ReadBoundaryUpdate;
-        onUpdate(update);
-      } catch (error) {
-        console.warn('[STOMP/SockJS] 읽음 경계 파싱 실패:', error);
+        onUpdate(JSON.parse(msg.body) as ReadBoundaryUpdate);
+      } catch (e) {
+        console.warn('[STOMP] read-boundary parse failed:', e);
       }
     },
-    {
-      Authorization: authHeaders().Authorization,
-      id: `sub-read-${roomId}-${Date.now()}`,
-    } as any
+    { ...authHeaders(), id: `sub-read-${roomId}-${Date.now()}` } as any
   );
-
-  console.log('[STOMP/SockJS] 읽음 경계 구독 완료:', destination);
 
   return () => {
     try {
-      console.log('[STOMP/SockJS] 읽음 경계 구독 해제:', destination);
       sub.unsubscribe();
     } catch {}
   };
@@ -356,7 +365,7 @@ export function sendTextSock(roomId: number, content: string) {
       content,
       clientMessageId: `client_${Date.now()}_${Math.random()
         .toString(36)
-        .substr(2, 9)}`,
+        .slice(2, 9)}`,
     }),
   });
 }
@@ -377,10 +386,10 @@ export function sendImageSock(
       type: 'IMAGE',
       name: fileName,
       attachmentFileIdsInOrder: fileIds,
-      fileSize: fileSize,
+      fileSize,
       clientMessageId: `client_${Date.now()}_${Math.random()
         .toString(36)
-        .substr(2, 9)}`,
+        .slice(2, 9)}`,
     }),
   });
 }
@@ -401,51 +410,32 @@ export function sendFileSock(
       type: 'FILE',
       name: fileName,
       attachmentFileIdsInOrder: fileIds,
-      fileSize: fileSize,
+      fileSize,
       clientMessageId: `client_${Date.now()}_${Math.random()
         .toString(36)
-        .substr(2, 9)}`,
+        .slice(2, 9)}`,
     }),
   });
 }
 
-// ====== 편의 헬퍼 ======
+// ====== 상태 헬퍼 ======
 export function isConnected(): boolean {
-  // client.connected가 더 정확한 연결 상태를 나타냄
-  const isActuallyConnected = client?.connected === true;
-
-  // connected 변수도 동기화
-  if (isActuallyConnected && !connected) {
-    connected = true;
-  } else if (!isActuallyConnected && connected) {
-    connected = false;
-  }
-
-  return isActuallyConnected;
+  return client?.connected === true;
 }
 
 export async function waitForConnection(timeoutMs = 10000): Promise<boolean> {
   if (isConnected()) return true;
-
+  const start = Date.now();
   return new Promise((resolve) => {
-    const startTime = Date.now();
-
-    const checkConnection = () => {
-      if (isConnected()) {
-        resolve(true);
-        return;
+    const tick = () => {
+      if (isConnected()) return resolve(true);
+      if (Date.now() - start > timeoutMs) {
+        console.warn('[STOMP] waitForConnection timeout');
+        return resolve(false);
       }
-
-      if (Date.now() - startTime > timeoutMs) {
-        console.warn('[STOMP/SockJS] 연결 대기 시간 초과');
-        resolve(false);
-        return;
-      }
-
-      setTimeout(checkConnection, 100);
+      setTimeout(tick, 100);
     };
-
-    checkConnection();
+    tick();
   });
 }
 
@@ -455,23 +445,76 @@ export async function connectAndSubscribeSock(
   token?: string
 ): Promise<() => void> {
   await connectSock(token);
-
-  // stompjs의 activate는 비동기라 연결완료 보장
-  await new Promise<void>((resolve, reject) => {
-    const c = ensureClient();
-
-    const ok = () => {
-      resolve();
-    };
-    const fail = (e: any) => {
-      reject(e);
-    };
-
-    c.onConnect = () => ok();
-    c.onWebSocketError = fail;
-
-    if (c.connected) ok();
-  });
-
+  const c = ensureClient();
+  if (!c.connected) {
+    const ok = await waitForConnection(15000);
+    if (!ok)
+      console.warn(
+        '[STOMP] connectAndSubscribe: connection not ready (will still try subscribe)'
+      );
+  }
   return subscribeRoomSock(roomId, onMessage);
+}
+// ✅ stompClient.ts 하단에 추가
+
+let ensureOncePromise: Promise<boolean> | null = null;
+
+/**
+ * JWT가 존재할 때 STOMP 연결을 한 번만 안전하게 시도하고,
+ * 연결이 완료되면 true, 실패 시 false 반환.
+ */
+export async function ensureConnectedOnce(
+  jwt: string,
+  timeoutMs = 12000
+): Promise<boolean> {
+  // 이미 연결되어 있으면 OK
+  if (client?.connected) return true;
+
+  // 동시에 여러 번 호출될 때 중복 방지
+  if (!ensureOncePromise) {
+    ensureOncePromise = (async () => {
+      try {
+        console.log('[WS] ensureConnectedOnce() called');
+        // 실제 connect 호출
+        await connectSock(jwt);
+
+        // 연결 완료까지 대기
+        const ok = await waitForConnection(timeoutMs);
+        if (ok) {
+          console.log('[WS] ✅ Connected successfully');
+          return true;
+        }
+
+        // 첫 시도 실패 시, 한 번 강제 재시도
+        console.warn('[WS] ⚠️ First connect attempt failed, retrying...');
+        try {
+          await disconnectSock();
+        } catch {}
+        await connectSock(jwt);
+        const retryOk = await waitForConnection(timeoutMs);
+        console.log('[WS] Retry result:', retryOk);
+        return retryOk;
+      } catch (e) {
+        console.error('[WS] ❌ ensureConnectedOnce() failed:', e);
+        return false;
+      } finally {
+        // 완료 후 promise 초기화 (다음 호출을 허용)
+        ensureOncePromise = null;
+      }
+    })();
+  }
+
+  return ensureOncePromise;
+}
+
+/**
+ * (선택) 현재 STOMP 연결 상태를 쉽게 확인하기 위한 헬퍼
+ */
+export function getDebugState() {
+  return {
+    hasClient: !!client,
+    connected: client?.connected ?? false,
+    isActive,
+    hasToken: !!currentToken,
+  };
 }

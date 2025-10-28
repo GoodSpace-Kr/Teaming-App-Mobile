@@ -22,8 +22,6 @@ import {
   CreateTeamRequest,
 } from '../../../src/services/teamService';
 import { AvatarService } from '../../../src/services/avatarService';
-import * as FileSystem from 'expo-file-system';
-import * as Crypto from 'expo-crypto';
 
 const { width } = Dimensions.get('window');
 

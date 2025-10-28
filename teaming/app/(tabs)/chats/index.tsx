@@ -24,6 +24,8 @@ import {
   disconnectSock,
   isConnected as isWebSocketConnected,
   waitForConnection,
+  ensureConnectedOnce,
+  getDebugState,
 } from '../../../src/services/stompClient';
 import { createPayment } from '../../../src/services/api';
 
@@ -34,6 +36,35 @@ export default function ChatsScreen() {
   const [error, setError] = useState<string | null>(null);
   const [retryKey, setRetryKey] = useState(0);
   const [jwt, setJwt] = useState<string | null>(null);
+
+  // ✅ JWT가 준비되면 한 번은 반드시 연결을 올려두는 부트스트랩
+  useEffect(() => {
+    let mounted = true;
+
+    (async () => {
+      if (!jwt) return; // 토큰 없으면 아무것도 안함
+
+      try {
+        // stompClient에 connectingPromise 보호가 있으니 중복 호출 OK
+        await connectSock(jwt);
+        const ok = await waitForConnection(12000);
+        if (!mounted) return;
+        console.log('[WS BOOTSTRAP@Chats] connected?', ok);
+        setIsConnected(ok);
+      } catch (e) {
+        if (!mounted) return;
+        console.log(
+          '[WS BOOTSTRAP@Chats] connect failed (will retry elsewhere)',
+          e
+        );
+        setIsConnected(false);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, [jwt]);
 
   // 결제 관련 상태
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -80,7 +111,7 @@ export default function ChatsScreen() {
       console.log('❌ 실제 웹소켓 연결 상태 미만족 - 구독하지 않음');
       return;
     }
-
+    // Tbtehfdl02
     // 로컬 상태도 업데이트
     if (!isConnected) {
       setIsConnected(true);
@@ -196,7 +227,7 @@ export default function ChatsScreen() {
       // 채팅방 목록 로드 완료 후 웹소켓 연결
       if (jwt && sortedRooms.length > 0) {
         console.log('🚀 채팅방 목록 로드 완료 - 웹소켓 연결 시작');
-        await connectWebSocket();
+        await safeConnectWebSocket();
         console.log('✅ 웹소켓 연결 완료 - 구독 시작 가능');
       }
     } catch (err) {
@@ -226,6 +257,16 @@ export default function ChatsScreen() {
       // 에러 로그 제거 - 조용한 재시도
       console.log('🔄 웹소켓 연결 중 - 백그라운드에서 재시도 중...');
       setIsConnected(false);
+    }
+  };
+
+  // 안전한 웹소켓 연결 (에러가 발생해도 앱이 튕기지 않음)
+  const safeConnectWebSocket = async () => {
+    try {
+      await connectWebSocket();
+    } catch (error) {
+      console.warn('🛡️ 웹소켓 연결 중 예외 발생 - 앱 안정성 보장:', error);
+      // 에러가 발생해도 앱이 튕기지 않도록 조용히 처리
     }
   };
 
