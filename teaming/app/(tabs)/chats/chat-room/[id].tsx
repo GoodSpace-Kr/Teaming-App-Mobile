@@ -31,6 +31,8 @@ import {
   sendFileSock,
   disconnectSock,
   updateSockToken,
+  isConnected as isWebSocketConnected,
+  waitForConnection,
   type ChatMessage,
   type ReadBoundaryUpdate,
 } from '@/src/services/stompClient';
@@ -319,11 +321,19 @@ export default function ChatRoomScreen() {
           // 메시지 히스토리 로드 (웹소켓 연결과 병렬로 실행)
           loadMessageHistory();
 
-          // 웹소켓이 이미 연결되어 있다고 가정하고 읽음 경계 구독만 시작
+          // 웹소켓 연결 상태 확인
           setConnectionStatus('connecting');
-          setIsConnected(true);
-          setConnectionStatus('connected');
-          console.log('✅ 채팅방 진입 - 읽음 경계 구독 시작');
+          console.log('🔍 웹소켓 연결 상태 확인 중...');
+
+          if (isWebSocketConnected()) {
+            setIsConnected(true);
+            setConnectionStatus('connected');
+            console.log('✅ 채팅방 진입 - 웹소켓 연결 확인 완료');
+          } else {
+            console.log('⚠️ 웹소켓 연결되지 않음 - 구독 시도');
+            setIsConnected(false);
+            setConnectionStatus('disconnected');
+          }
 
           // 메시지 구독 및 읽음 경계 구독
           setTimeout(() => {
@@ -938,21 +948,7 @@ export default function ChatRoomScreen() {
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>{chatRoomData.title}</Text>
-          <View style={styles.connectionStatus}>
-            <View
-              style={[
-                styles.statusDot,
-                { backgroundColor: isConnected ? '#4CAF50' : '#FF6B6B' },
-              ]}
-            />
-            <Text style={styles.statusText}>
-              {isConnected
-                ? '연결됨'
-                : connectionStatus === 'connecting'
-                ? '연결 중...'
-                : '연결 끊김'}
-            </Text>
-          </View>
+          <View style={styles.connectionStatus}></View>
         </View>
         <TouchableOpacity onPress={handleMenuPress} style={styles.menuButton}>
           <Ionicons name="ellipsis-horizontal" size={24} color="#FFFFFF" />

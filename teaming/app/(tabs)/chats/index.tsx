@@ -22,6 +22,8 @@ import {
   connectSock,
   subscribeRoomSock,
   disconnectSock,
+  isConnected as isWebSocketConnected,
+  waitForConnection,
 } from '../../../src/services/stompClient';
 import { createPayment } from '../../../src/services/api';
 
@@ -64,11 +66,24 @@ export default function ChatsScreen() {
       jwt: jwt ? '있음' : '없음',
       isConnected,
       chatRoomsLength: chatRooms.length,
+      actualConnectionStatus: isWebSocketConnected(),
     });
 
-    if (!jwt || !isConnected || chatRooms.length === 0) {
+    if (!jwt || chatRooms.length === 0) {
       console.log('❌ 웹소켓 구독 조건 미만족 - 구독하지 않음');
       return;
+    }
+
+    // 연결 상태 확인 (더 유연하게)
+    const isActuallyConnected = isWebSocketConnected();
+    if (!isActuallyConnected) {
+      console.log('❌ 실제 웹소켓 연결 상태 미만족 - 구독하지 않음');
+      return;
+    }
+
+    // 로컬 상태도 업데이트
+    if (!isConnected) {
+      setIsConnected(true);
     }
 
     console.log(
@@ -80,12 +95,15 @@ export default function ChatsScreen() {
     const unsubscribes: (() => void)[] = [];
 
     chatRooms.forEach((room) => {
+      console.log(`🔔 채팅방 ${room.roomId} 구독 시작`);
+
       // 채팅 메시지 구독 - 모든 채팅방의 메시지를 실시간으로 수신
       const unsubscribe = subscribeRoomSock(room.roomId, (message) => {
         console.log('📨 채팅방 목록에서 메시지 수신:', {
           roomId: room.roomId,
           messageId: message.messageId,
           content: message.content,
+          sender: message.sender?.name,
         });
 
         // 해당 채팅방의 lastMessage 업데이트 및 unreadCount 증가
@@ -204,13 +222,9 @@ export default function ChatsScreen() {
       await connectSock(jwt);
       setIsConnected(true);
       console.log('✅ 채팅방 목록용 웹소켓 연결 성공 - isConnected: true');
-
-      // 연결 완료 후 잠시 대기하여 구독이 확실히 시작되도록 함
-      setTimeout(() => {
-        console.log('🔄 웹소켓 연결 완료 후 구독 상태 재확인');
-      }, 100);
     } catch (error) {
-      console.error('❌ 채팅방 목록용 웹소켓 연결 실패:', error);
+      // 에러 로그 제거 - 조용한 재시도
+      console.log('🔄 웹소켓 연결 중 - 백그라운드에서 재시도 중...');
       setIsConnected(false);
     }
   };
@@ -234,7 +248,7 @@ export default function ChatsScreen() {
       console.log('🚀 결제 시작:', room);
 
       // 결제 금액 계산: price * (memberCount - 1)
-      const paymentAmount = room.type.price * (room.memberCount - 1);
+      const paymentAmount = Number(room.type.price) * (room.memberCount - 1);
 
       console.log('💰 결제 금액 계산:', {
         price: room.type.price,

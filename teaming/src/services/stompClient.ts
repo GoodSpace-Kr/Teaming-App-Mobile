@@ -88,9 +88,9 @@ export async function connectSock(token?: string) {
 
   // RN에서도 사용 가능한 SockJS 인스턴스 생성
   const socketFactory = () =>
-    // transports 지정: 우선순위를 websocket->xhr-streaming->xhr-polling으로
+    // transports 지정: 안정적인 순서로 변경 (xhr-polling->xhr-streaming->websocket)
     new SockJS(SOCKJS_ENDPOINT, null, {
-      transports: ['websocket', 'xhr-streaming', 'xhr-polling'],
+      transports: ['xhr-polling', 'xhr-streaming', 'websocket'],
     });
 
   client = new Client({
@@ -108,7 +108,7 @@ export async function connectSock(token?: string) {
     heartbeatIncoming: 10000,
     heartbeatOutgoing: 10000,
 
-    reconnectDelay: 5000, // 재연결 지연 시간 증가
+    reconnectDelay: 2000, // 재연결 지연 시간 단축 (5초 → 2초)
 
     debug: (msg) => console.log('[STOMP/SockJS]', msg),
 
@@ -163,7 +163,48 @@ export async function connectSock(token?: string) {
     },
   });
 
+  console.log('[STOMP/SockJS] Starting connection...');
   client.activate();
+
+  // 연결 완료를 기다림 (에러 없이 조용한 재시도)
+  return new Promise<void>((resolve) => {
+    const timeout = setTimeout(() => {
+      console.log('⏰ 웹소켓 연결 시간 초과 - 백그라운드에서 재시도 중...');
+      // 에러를 던지지 않고 조용히 resolve (백그라운드에서 재연결 시도)
+      client!.onConnect = originalOnConnect; // 원래 핸들러 복원
+      resolve();
+    }, 15000); // 10초 → 15초로 증가
+
+    const onConnectSuccess = () => {
+      clearTimeout(timeout);
+      client!.onConnect = originalOnConnect; // 원래 핸들러 복원
+      resolve();
+    };
+
+    const onConnectError = (error: any) => {
+      clearTimeout(timeout);
+      console.log(
+        '🔄 웹소켓 연결 실패 - 백그라운드에서 재시도 중...',
+        error.message || error
+      );
+      // 에러를 던지지 않고 조용히 resolve (백그라운드에서 재연결 시도)
+      client!.onWebSocketError = originalOnError; // 원래 핸들러 복원
+      resolve();
+    };
+
+    // 원래 핸들러 저장
+    const originalOnConnect = client!.onConnect;
+    const originalOnError = client!.onWebSocketError;
+
+    // 임시 핸들러 설정
+    client!.onConnect = onConnectSuccess;
+    client!.onWebSocketError = onConnectError;
+
+    // 이미 연결되어 있다면 즉시 resolve
+    if (client!.connected) {
+      onConnectSuccess();
+    }
+  });
 }
 
 export async function disconnectSock() {
@@ -369,6 +410,45 @@ export function sendFileSock(
 }
 
 // ====== 편의 헬퍼 ======
+export function isConnected(): boolean {
+  // client.connected가 더 정확한 연결 상태를 나타냄
+  const isActuallyConnected = client?.connected === true;
+
+  // connected 변수도 동기화
+  if (isActuallyConnected && !connected) {
+    connected = true;
+  } else if (!isActuallyConnected && connected) {
+    connected = false;
+  }
+
+  return isActuallyConnected;
+}
+
+export async function waitForConnection(timeoutMs = 10000): Promise<boolean> {
+  if (isConnected()) return true;
+
+  return new Promise((resolve) => {
+    const startTime = Date.now();
+
+    const checkConnection = () => {
+      if (isConnected()) {
+        resolve(true);
+        return;
+      }
+
+      if (Date.now() - startTime > timeoutMs) {
+        console.warn('[STOMP/SockJS] 연결 대기 시간 초과');
+        resolve(false);
+        return;
+      }
+
+      setTimeout(checkConnection, 100);
+    };
+
+    checkConnection();
+  });
+}
+
 export async function connectAndSubscribeSock(
   roomId: number,
   onMessage: (m: ChatMessage, raw: IMessage) => void,

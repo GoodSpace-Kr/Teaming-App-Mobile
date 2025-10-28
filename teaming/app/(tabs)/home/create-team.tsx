@@ -75,11 +75,7 @@ export default function CreateTeamScreen() {
       title: roomTitle.trim(),
       description: subtitle.trim(),
       memberCount: teamCount,
-      roomType: selectedRoom.toUpperCase() as
-        | 'DEMO'
-        | 'BASIC'
-        | 'STANDARD'
-        | 'ELITE',
+      roomType: selectedRoom.toUpperCase() as 'BASIC' | 'STANDARD' | 'ELITE',
       // 이미지는 방 생성 후 업로드하므로 undefined
       imageKey: undefined,
       imageVersion: undefined,
@@ -210,17 +206,9 @@ export default function CreateTeamScreen() {
 
   const roomTypes = [
     {
-      id: 'demo',
-      name: 'Demo Room',
-      price: '0',
-      benefit: '무료로 서비스를 이용해 보십시오.',
-      logo: require('../../../assets/images/logo.png'),
-      color: '#FFFFFF',
-    },
-    {
       id: 'basic',
       name: 'Basic Room',
-      price: '2060',
+      price: '2000',
       benefit: '메가커피 아이스 아메리카노 1개',
       logo: require('../../../assets/images/(makeTeam)/mega.png'),
       color: '#FFFFFF',
@@ -228,7 +216,7 @@ export default function CreateTeamScreen() {
     {
       id: 'standard',
       name: 'Standard Room',
-      price: '4840',
+      price: '4800',
       benefit: '스타벅스 아이스 아메리카노 1개',
       logo: require('../../../assets/images/(makeTeam)/starbucks.png'),
       color: '#FFFFFF',
@@ -236,7 +224,7 @@ export default function CreateTeamScreen() {
     {
       id: 'elite',
       name: 'Elite Room',
-      price: '8240',
+      price: '8200',
       benefit: '스타벅스 아이스 아메리카노 1개 + 프렌치 크루아상',
       logo: require('../../../assets/images/(makeTeam)/starbucks.png'),
       color: '#FFD700', // 네온 노란색/밝은 금색
@@ -347,9 +335,7 @@ export default function CreateTeamScreen() {
               <TouchableOpacity
                 key={room.id}
                 style={[
-                  room.id === 'demo'
-                    ? styles.demoRoomCard
-                    : room.id === 'elite'
+                  room.id === 'elite'
                     ? styles.eliteRoomCard
                     : room.id === 'standard'
                     ? styles.standardRoomCard
@@ -363,7 +349,6 @@ export default function CreateTeamScreen() {
                     <Text
                       style={[
                         styles.roomName,
-                        room.id === 'demo' && styles.demoRoomName,
                         room.id === 'elite' && styles.eliteRoomName,
                         room.id === 'standard' && styles.standardRoomName,
                       ]}
@@ -453,7 +438,7 @@ const styles = StyleSheet.create({
     padding: 8,
   },
   headerTitle: {
-    fontSize: 25,
+    fontSize: 20,
     fontWeight: 'bold',
     color: '#FFFFFF',
     flex: 1,

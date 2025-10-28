@@ -75,6 +75,26 @@ export default function FileChatBubble({
       : '파일';
     return `${base}${att.fileId ?? idx}${extFromMime(att.mimeType)}`;
   };
+
+  const truncateFileName = (fileName: string) => {
+    if (fileName.length <= 25) return fileName;
+
+    // 확장자 추출
+    const lastDotIndex = fileName.lastIndexOf('.');
+    if (lastDotIndex === -1) {
+      // 확장자가 없으면 25글자에서 자르고 ... 추가
+      return fileName.substring(0, 22) + '...';
+    }
+
+    const nameWithoutExt = fileName.substring(0, lastDotIndex);
+    const extension = fileName.substring(lastDotIndex);
+
+    // 확장자를 제외한 이름이 22글자 이하면 그대로 반환
+    if (nameWithoutExt.length <= 22) return fileName;
+
+    // 확장자를 제외한 이름을 22글자로 자르고 ... + 확장자
+    return nameWithoutExt.substring(0, 22) + '...' + extension;
+  };
   const formatFileSizeLocal = (size?: number) => {
     // 0도 유효하게 표시
     if (typeof size !== 'number' || size < 0) return '';
@@ -224,7 +244,9 @@ export default function FileChatBubble({
             style={[styles.fileName, { color: textColor }]}
             numberOfLines={1}
           >
-            {attachment.name === '___' ? '이미지 파일' : attachment.name}
+            {attachment.name === '___'
+              ? '이미지 파일'
+              : truncateFileName(attachment.name)}
           </Text>
           {attachment.byteSize && (
             <Text style={styles.fileSize}>
