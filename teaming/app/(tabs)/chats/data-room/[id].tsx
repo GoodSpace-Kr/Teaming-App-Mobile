@@ -22,18 +22,35 @@ const { width } = Dimensions.get('window');
 // FileItem 타입은 이미 import했으므로 중복 제거
 
 export default function DataRoomScreen() {
-  const { id } = useLocalSearchParams();
+  const { id, members, title } = useLocalSearchParams();
   const roomId = parseInt(id as string, 10);
 
   // 상태 관리
   const [files, setFiles] = useState<FileItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [roomMembers, setRoomMembers] = useState<any[]>([]);
 
-  // 파일 목록 로드
+  // members 정보 파싱
   useEffect(() => {
-    loadFiles();
-  }, [roomId]);
+    if (members) {
+      try {
+        const membersData = JSON.parse(decodeURIComponent(members as string));
+        setRoomMembers(membersData);
+        console.log('📋 자료실 - 파싱된 members 데이터:', membersData);
+      } catch (error) {
+        console.error('❌ members 파싱 실패:', error);
+        setRoomMembers([]);
+      }
+    }
+  }, [members]);
+
+  // 파일 목록 로드 (roomMembers가 설정된 후에 로드)
+  useEffect(() => {
+    if (roomMembers.length > 0 || !members) {
+      loadFiles();
+    }
+  }, [roomId, roomMembers.length]);
 
   const loadFiles = async () => {
     try {
@@ -43,9 +60,15 @@ export default function DataRoomScreen() {
       console.log('📁 자료실 파일 목록 로드 시작:', { roomId });
 
       const roomFiles = await FileService.getRoomFiles(roomId);
-      const convertedFiles = roomFiles.map((roomFile) =>
-        FileService.convertRoomFileToFileItem(roomFile)
-      );
+      const convertedFiles = roomFiles.map((roomFile) => {
+        const memberInfo = getMemberInfo(roomFile.uploaderId);
+        const fileItem = FileService.convertRoomFileToFileItem(roomFile);
+        return {
+          ...fileItem,
+          uploadedBy: memberInfo.name,
+          uploadedByAvatar: memberInfo.avatarUrl,
+        };
+      });
 
       setFiles(convertedFiles);
       console.log(
@@ -59,6 +82,23 @@ export default function DataRoomScreen() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // uploaderId로 멤버 정보 찾기
+  const getMemberInfo = (uploaderId: number) => {
+    const member = roomMembers.find((m) => m.memberId === uploaderId);
+    if (member) {
+      return {
+        name: member.name,
+        avatarUrl: member.avatarUrl || member.avatarKey,
+        role: member.roomRole,
+      };
+    }
+    return {
+      name: `사용자 ${uploaderId}`,
+      avatarUrl: null,
+      role: 'MEMBER',
+    };
   };
 
   const handleBackPress = () => {
@@ -269,6 +309,16 @@ const styles = StyleSheet.create({
   fileUploader: {
     fontSize: 14,
     color: '#CCCCCC',
+  },
+  uploaderInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  uploaderAvatar: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    marginRight: 6,
   },
   fileDate: {
     fontSize: 12,

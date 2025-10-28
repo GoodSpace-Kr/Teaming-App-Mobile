@@ -33,6 +33,7 @@ export interface FileItem {
   uploadedAt: string;
   fileIcon: string;
   fileId?: number; // 서버에서 받은 실제 fileId
+  uploadedByAvatar?: string; // 업로더 아바타 URL
 }
 
 // 백엔드 API 응답 타입

@@ -49,9 +49,10 @@ interface TaskInfo {
 }
 
 export default function ViewTaskScreen() {
-  const { id, roomId } = useLocalSearchParams<{
+  const { id, roomId, members } = useLocalSearchParams<{
     id?: string;
     roomId?: string;
+    members?: string;
   }>();
   const [taskInfo, setTaskInfo] = useState<TaskWithMembers | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -64,14 +65,21 @@ export default function ViewTaskScreen() {
     content: string;
     submittedAt: string;
   } | null>(null);
+  const [roomMembers, setRoomMembers] = useState<any[]>([]);
 
-  // 멤버 정보 매핑 (실제로는 API에서 가져와야 함)
-  const memberMap = new Map<number, TaskMember>([
-    [1, { id: 1, name: '권민석', hasSubmitted: false }],
-    [2, { id: 2, name: '정치학존잘남', hasSubmitted: false }],
-    [3, { id: 3, name: '팀플하기싫다', hasSubmitted: false }],
-    [4, { id: 4, name: '최순조(팀장)', hasSubmitted: false }],
-  ]);
+  // members 정보 파싱
+  useEffect(() => {
+    if (members) {
+      try {
+        const membersData = JSON.parse(decodeURIComponent(members));
+        setRoomMembers(membersData);
+        console.log('📋 과제 조회 - 파싱된 members 데이터:', membersData);
+      } catch (error) {
+        console.error('❌ members 파싱 실패:', error);
+        setRoomMembers([]);
+      }
+    }
+  }, [members]);
 
   // JWT 토큰에서 사용자 ID 추출하는 함수
   const getUserIdFromToken = (token: string): number | null => {
@@ -109,12 +117,12 @@ export default function ViewTaskScreen() {
     loadCurrentUserInfo();
   }, []);
 
-  // 과제 상세 정보 로드
+  // 과제 상세 정보 로드 (roomMembers가 설정된 후에 로드)
   useEffect(() => {
-    if (currentUserId !== null) {
+    if (currentUserId !== null && (roomMembers.length > 0 || !members)) {
       loadTaskDetail();
     }
-  }, [id, roomId, currentUserId]);
+  }, [id, roomId, currentUserId, roomMembers.length]);
 
   const loadTaskDetail = async () => {
     if (!id || !roomId) return;
@@ -137,6 +145,19 @@ export default function ViewTaskScreen() {
 
       if (targetTask) {
         // 백엔드 Task를 UI용 TaskWithMembers로 변환
+        const memberMap = new Map<number, TaskMember>();
+
+        // 실제 roomMembers 정보를 TaskMember 형식으로 변환
+        roomMembers.forEach((member) => {
+          const name =
+            member.roomRole === 'LEADER' ? `${member.name}(팀장)` : member.name;
+          memberMap.set(member.memberId, {
+            id: member.memberId,
+            name: name,
+            hasSubmitted: false,
+          });
+        });
+
         const transformedTask = TaskService.transformTaskForUI(
           targetTask,
           memberMap

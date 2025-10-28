@@ -431,6 +431,27 @@ export const getRoomDetail = async (
   }
 };
 
+// 채팅방 초대코드 조회 API
+export interface InviteCodeResponse {
+  inviteCode: string;
+}
+
+export const getRoomInviteCode = async (
+  roomId: number
+): Promise<InviteCodeResponse> => {
+  try {
+    console.log('🚀 채팅방 초대코드 조회 API 요청 - roomId:', roomId);
+    const response = await apiClient.get<InviteCodeResponse>(
+      `/rooms/${roomId}/invite`
+    );
+    console.log('✅ 채팅방 초대코드 조회 성공:', response.data);
+    return response.data;
+  } catch (error: any) {
+    console.error('❌ 채팅방 초대코드 조회 실패:', error);
+    throw error;
+  }
+};
+
 // 아바타 URL 발급 API
 export interface AvatarUrlResponse {
   url: string;
@@ -462,9 +483,9 @@ export const getGifticons = async (email: string): Promise<GifticonItem[]> => {
     console.log('🚀 기프티콘 조회 API 요청 - email:', email);
     console.log('📤 전달할 파라미터:', { email });
 
-    const response = await apiClient.get<GifticonItem[]>('/admin/gifticon', {
-      params: { email },
-    });
+    const response = await apiClient.get<GifticonItem[]>(
+      `/gifticon?email=${encodeURIComponent(email)}`
+    );
 
     console.log('✅ 기프티콘 조회 성공:', response.data);
     return response.data;
@@ -472,6 +493,23 @@ export const getGifticons = async (email: string): Promise<GifticonItem[]> => {
     console.error('❌ 기프티콘 조회 실패:', error);
     console.error('📥 에러 응답:', error.response?.data);
     throw error;
+  }
+};
+
+// 채팅방 읽음 처리 API
+export const markRoomAsRead = async (roomId: number): Promise<void> => {
+  try {
+    console.log('🚀 채팅방 읽음 처리 API 요청:', { roomId });
+
+    const response = await apiClient.post(`/rooms/${roomId}/read`, {
+      lastReadMessageId: null,
+    });
+
+    console.log('📤 POST /rooms/' + roomId + '/read 요청 완료');
+    console.log('✅ 채팅방 읽음 처리 성공');
+  } catch (error: any) {
+    console.error('❌ 채팅방 읽음 처리 실패:', error);
+    // 실패해도 계속 진행되도록 에러를 무시
   }
 };
 

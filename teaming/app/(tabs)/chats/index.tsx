@@ -17,9 +17,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { WebView } from 'react-native-webview';
 import { Linking } from 'react-native';
 import { getChatRooms, ChatRoom } from '../../../src/services/chatService';
-import { useWebSocket } from '../../../src/hooks/useWebSocket';
 import { getAccessToken } from '../../../src/services/tokenManager';
-import { subscribeRoomSock } from '../../../src/services/stompClient';
+import {
+  connectSock,
+  subscribeRoomSock,
+  disconnectSock,
+} from '../../../src/services/stompClient';
 import { createPayment } from '../../../src/services/api';
 
 const { width } = Dimensions.get('window');
@@ -52,26 +55,42 @@ export default function ChatsScreen() {
     loadToken();
   }, []);
 
-  // 웹소켓 연결 (전체 채팅방 목록 업데이트용)
-  const { isConnected } = useWebSocket({
-    jwt: jwt || '',
-    autoConnect: !!jwt,
-  });
+  // 웹소켓 연결 상태
+  const [isConnected, setIsConnected] = useState(false);
 
   // 웹소켓을 통한 실시간 메시지 수신 및 lastMessage 업데이트
   useEffect(() => {
-    if (!jwt || !isConnected) return;
+    console.log('🔍 웹소켓 구독 조건 확인:', {
+      jwt: jwt ? '있음' : '없음',
+      isConnected,
+      chatRoomsLength: chatRooms.length,
+    });
+
+    if (!jwt || !isConnected || chatRooms.length === 0) {
+      console.log('❌ 웹소켓 구독 조건 미만족 - 구독하지 않음');
+      return;
+    }
+
+    console.log(
+      '🔔 채팅방 목록에서 모든 채팅방 구독 시작:',
+      chatRooms.map((r) => r.roomId)
+    );
 
     // 모든 채팅방에 대해 웹소켓 구독
     const unsubscribes: (() => void)[] = [];
 
     chatRooms.forEach((room) => {
+      // 채팅 메시지 구독 - 모든 채팅방의 메시지를 실시간으로 수신
       const unsubscribe = subscribeRoomSock(room.roomId, (message) => {
-        console.log('📨 채팅방 목록에서 메시지 수신:', message);
+        console.log('📨 채팅방 목록에서 메시지 수신:', {
+          roomId: room.roomId,
+          messageId: message.messageId,
+          content: message.content,
+        });
 
-        // 해당 채팅방의 lastMessage 업데이트
-        setChatRooms((prevRooms) =>
-          prevRooms.map((prevRoom) => {
+        // 해당 채팅방의 lastMessage 업데이트 및 unreadCount 증가
+        setChatRooms((prevRooms) => {
+          const updatedRooms = prevRooms.map((prevRoom) => {
             if (prevRoom.roomId === room.roomId) {
               const lastMessage = {
                 id: message.messageId || 0,
@@ -87,13 +106,37 @@ export default function ChatsScreen() {
                 }) as any,
                 createdAt: message.createdAt || new Date().toISOString(),
               };
-              return { ...prevRoom, lastMessage };
+
+              // unreadCount 증가 (99+ 제한)
+              const newUnreadCount = Math.min(
+                (prevRoom.unreadCount || 0) + 1,
+                99
+              );
+
+              return {
+                ...prevRoom,
+                lastMessage,
+                unreadCount: newUnreadCount,
+              };
             }
             return prevRoom;
-          })
-        );
+          });
+
+          // 메시지 수신 후 시간순으로 재정렬
+          return updatedRooms.sort((a, b) => {
+            const timeA = a.lastMessage?.createdAt
+              ? new Date(a.lastMessage.createdAt).getTime()
+              : 0;
+            const timeB = b.lastMessage?.createdAt
+              ? new Date(b.lastMessage.createdAt).getTime()
+              : 0;
+            return timeB - timeA;
+          });
+        });
       });
       unsubscribes.push(unsubscribe);
+
+      // 읽음 경계 구독은 개별 채팅방에서만 처리
     });
 
     return () => {
@@ -115,8 +158,29 @@ export default function ChatsScreen() {
       setIsLoading(true);
       setError(null);
       const rooms = await getChatRooms();
-      setChatRooms(rooms);
-      console.log('✅ 채팅방 목록 로드 완료:', rooms.length, '개');
+
+      // 마지막 메시지 시간순으로 정렬 (최신 메시지가 위로)
+      const sortedRooms = rooms.sort((a, b) => {
+        const timeA = a.lastMessage?.createdAt
+          ? new Date(a.lastMessage.createdAt).getTime()
+          : 0;
+        const timeB = b.lastMessage?.createdAt
+          ? new Date(b.lastMessage.createdAt).getTime()
+          : 0;
+
+        // 최신 메시지가 위로 오도록 역순 정렬
+        return timeB - timeA;
+      });
+
+      setChatRooms(sortedRooms);
+      console.log('✅ 채팅방 목록 로드 완료:', sortedRooms.length, '개');
+
+      // 채팅방 목록 로드 완료 후 웹소켓 연결
+      if (jwt && sortedRooms.length > 0) {
+        console.log('🚀 채팅방 목록 로드 완료 - 웹소켓 연결 시작');
+        await connectWebSocket();
+        console.log('✅ 웹소켓 연결 완료 - 구독 시작 가능');
+      }
     } catch (err) {
       console.error('❌ 채팅방 목록 로드 실패:', err);
       setError('채팅방 목록을 불러오는데 실패했습니다.');
@@ -126,9 +190,43 @@ export default function ChatsScreen() {
     }
   };
 
+  // 웹소켓 연결 함수
+  const connectWebSocket = async () => {
+    console.log('🔍 웹소켓 연결 시도:', { jwt: jwt ? '있음' : '없음' });
+
+    if (!jwt) {
+      console.log('❌ JWT 토큰이 없어 웹소켓 연결하지 않음');
+      return;
+    }
+
+    try {
+      console.log('🔧 채팅방 목록용 웹소켓 연결 시작');
+      await connectSock(jwt);
+      setIsConnected(true);
+      console.log('✅ 채팅방 목록용 웹소켓 연결 성공 - isConnected: true');
+
+      // 연결 완료 후 잠시 대기하여 구독이 확실히 시작되도록 함
+      setTimeout(() => {
+        console.log('🔄 웹소켓 연결 완료 후 구독 상태 재확인');
+      }, 100);
+    } catch (error) {
+      console.error('❌ 채팅방 목록용 웹소켓 연결 실패:', error);
+      setIsConnected(false);
+    }
+  };
+
   useEffect(() => {
     fetchChatRooms();
   }, [retryKey]);
+
+  // 컴포넌트 언마운트 시 웹소켓 연결 정리 (앱 종료 시에만)
+  useEffect(() => {
+    return () => {
+      console.log('🧹 채팅방 목록 컴포넌트 언마운트 - 웹소켓 연결 유지');
+      // 개별 채팅방에서도 사용할 수 있도록 연결을 유지
+      // disconnectSock(); // 주석 처리
+    };
+  }, []);
 
   // 결제 처리 함수
   const handlePayment = async (room: any) => {
@@ -240,7 +338,8 @@ export default function ChatsScreen() {
     title: string,
     paymentStatus: string,
     roomType: any,
-    memberCount: number
+    memberCount: number,
+    ready: any
   ) => {
     // 결제가 필요한 경우 결제 웹뷰 표시
     if (paymentStatus === 'NOT_PAID') {
@@ -261,8 +360,9 @@ export default function ChatsScreen() {
     // 결제 완료된 경우 채팅방으로 이동
     const membersParam = encodeURIComponent(JSON.stringify(members));
     const titleParam = encodeURIComponent(title);
+    const readyParam = encodeURIComponent(JSON.stringify(ready));
     router.push(
-      `/(tabs)/chats/chat-room/${roomId}?role=${role}&success=${success}&members=${membersParam}&title=${titleParam}`
+      `/(tabs)/chats/chat-room/${roomId}?role=${role}&success=${success}&members=${membersParam}&title=${titleParam}&ready=${readyParam}`
     );
   };
 
@@ -344,7 +444,8 @@ export default function ChatsScreen() {
                       room.title,
                       room.paymentStatus,
                       room.type,
-                      room.memberCount
+                      room.memberCount,
+                      room.ready
                     )
                   }
                 >

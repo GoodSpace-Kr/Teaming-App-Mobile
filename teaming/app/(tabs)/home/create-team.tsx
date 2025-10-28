@@ -30,7 +30,7 @@ const { width } = Dimensions.get('window');
 export default function CreateTeamScreen() {
   const [roomTitle, setRoomTitle] = useState('');
   const [subtitle, setSubtitle] = useState('');
-  const [teamCount, setTeamCount] = useState(3);
+  const [teamCount, setTeamCount] = useState(2);
   const [selectedRoom, setSelectedRoom] = useState('demo');
   const [emails, setEmails] = useState(['', '', '']);
   const [roomImage, setRoomImage] = useState<string | null>(null);
@@ -325,7 +325,7 @@ export default function CreateTeamScreen() {
           <View style={styles.teamCountContainer}>
             <TouchableOpacity
               style={styles.countButton}
-              onPress={() => setTeamCount(Math.max(1, teamCount - 1))}
+              onPress={() => setTeamCount(Math.max(2, teamCount - 1))}
             >
               <Ionicons name="remove" size={20} color="#FFFFFF" />
             </TouchableOpacity>

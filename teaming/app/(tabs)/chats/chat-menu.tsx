@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -12,10 +12,11 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as Clipboard from 'expo-clipboard';
 import CompleteTeamModal from './complete-team-modal';
 import TeamCompletionSuccessModal from './team-completion-success-modal';
 import * as apiService from '@/src/services/api';
-import { getUserInfo } from '@/src/services/api';
+import { getUserInfo, getRoomInviteCode } from '@/src/services/api';
 
 const { width } = Dimensions.get('window');
 
@@ -27,13 +28,16 @@ interface Participant {
 }
 
 export default function ChatMenuScreen() {
-  const { roomId, isLeader, isCompleted, members, title } =
+  const { roomId, isLeader, isCompleted, members, title, ready } =
     useLocalSearchParams();
   const [showLeaveModal, setShowLeaveModal] = useState(false);
   const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [showInviteModal, setShowInviteModal] = useState(false);
   const [isCompleting, setIsCompleting] = useState(false);
   const [currentUserName, setCurrentUserName] = useState<string>('');
+  const [inviteCode, setInviteCode] = useState<string>('');
+  const [isLoadingInviteCode, setIsLoadingInviteCode] = useState(false);
 
   // 팀장 여부 확인 (실제로는 API에서 가져올 데이터)
   const isTeamLeader = isLeader === 'true';
@@ -104,7 +108,16 @@ export default function ChatMenuScreen() {
   };
 
   const handleDataRoom = () => {
-    router.push(`/(tabs)/chats/data-room/${roomId}`);
+    // members 정보를 자료실로 전달
+    const membersParam = members
+      ? `&members=${encodeURIComponent(members as string)}`
+      : '';
+    const titleParam = title
+      ? `&title=${encodeURIComponent(title as string)}`
+      : '';
+    router.push(
+      `/(tabs)/chats/data-room/${roomId}?${membersParam}${titleParam}`
+    );
   };
 
   const handleCreateTask = () => {
@@ -245,6 +258,55 @@ export default function ChatMenuScreen() {
     router.push('/(tabs)/home');
   };
 
+  // 초대코드 조회 함수
+  const handleInviteCode = async () => {
+    if (!roomId) return;
+
+    try {
+      setIsLoadingInviteCode(true);
+      console.log('🚀 초대코드 조회 - roomId:', roomId);
+      const response = await getRoomInviteCode(Number(roomId));
+      setInviteCode(response.inviteCode);
+      setShowInviteModal(true);
+      console.log('✅ 초대코드 조회 성공:', response.inviteCode);
+    } catch (error) {
+      console.error('❌ 초대코드 조회 실패:', error);
+      Alert.alert('오류', '초대코드를 불러오는데 실패했습니다.');
+    } finally {
+      setIsLoadingInviteCode(false);
+    }
+  };
+
+  // 초대코드 모달 닫기
+  const handleCloseInviteModal = () => {
+    setShowInviteModal(false);
+    setInviteCode('');
+  };
+
+  // 초대코드 복사 함수
+  const handleCopyInviteCode = async () => {
+    try {
+      await Clipboard.setStringAsync(inviteCode);
+      Alert.alert('복사 완료', '초대코드가 클립보드에 복사되었습니다.');
+    } catch (error) {
+      console.error('❌ 초대코드 복사 실패:', error);
+      Alert.alert('오류', '초대코드 복사에 실패했습니다.');
+    }
+  };
+
+  // 인원이 다 찼는지 확인하는 함수
+  const isRoomFull = () => {
+    if (!ready) return false;
+
+    try {
+      const readyData = JSON.parse(decodeURIComponent(ready as string));
+      return readyData.everyMemberEntered === true;
+    } catch (error) {
+      console.error('❌ ready 파싱 실패:', error);
+      return false;
+    }
+  };
+
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
@@ -270,6 +332,23 @@ export default function ChatMenuScreen() {
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* 자료실/과제 섹션 */}
         <View style={styles.section}>
+          {/* 초대코드 섹션 - 팀장이고 인원이 다 차지 않은 경우에만 표시 */}
+          {isTeamLeader && !isRoomFull() && (
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={handleInviteCode}
+              disabled={isLoadingInviteCode}
+            >
+              <View style={styles.menuIcon}>
+                <Ionicons name="link" size={24} color="#FF6B6B" />
+              </View>
+              <Text style={styles.menuText}>
+                {isLoadingInviteCode ? '초대코드 조회 중...' : '초대코드'}
+              </Text>
+              <Ionicons name="chevron-forward" size={20} color="#666666" />
+            </TouchableOpacity>
+          )}
+
           <TouchableOpacity style={styles.menuItem} onPress={handleDataRoom}>
             <View style={styles.menuIcon}>
               <Ionicons name="folder" size={24} color="#4CAF50" />
@@ -375,14 +454,14 @@ export default function ChatMenuScreen() {
         visible={showCompleteModal}
         onClose={handleCancelComplete}
         onConfirm={handleConfirmComplete}
-        teamName="정치학 발표"
+        teamName={title ? decodeURIComponent(String(title)) : 'No Team Name'}
       />
 
       {/* 팀플 완료 성공 모달 */}
       <TeamCompletionSuccessModal
         visible={showSuccessModal}
         onClose={handleSuccessModalClose}
-        teamName="정치학 발표"
+        teamName={title ? decodeURIComponent(String(title)) : 'No Team Name'}
       />
 
       {/* 방 떠나기 확인 모달 */}
@@ -406,6 +485,37 @@ export default function ChatMenuScreen() {
                 onPress={handleConfirmLeave}
               >
                 <Text style={styles.modalConfirmText}>나가기</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      )}
+
+      {/* 초대코드 모달 */}
+      {showInviteModal && (
+        <View style={styles.modalOverlay}>
+          <View style={styles.inviteModalContainer}>
+            <Text style={styles.inviteModalTitle}>초대코드</Text>
+            <Text style={styles.inviteModalSubtitle}>
+              아래 초대코드를 복사하여 팀원들에게 공유하세요
+            </Text>
+
+            <View style={styles.inviteCodeContainer}>
+              <Text style={styles.inviteCodeText}>{inviteCode}</Text>
+            </View>
+
+            <View style={styles.inviteModalButtons}>
+              <TouchableOpacity
+                style={styles.inviteModalCancelButton}
+                onPress={handleCloseInviteModal}
+              >
+                <Text style={styles.inviteModalCancelText}>닫기</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.inviteModalCopyButton}
+                onPress={handleCopyInviteCode}
+              >
+                <Text style={styles.inviteModalCopyText}>복사하기</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -643,5 +753,79 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666666',
     textAlign: 'center',
+  },
+  // 초대코드 모달 스타일
+  inviteModalContainer: {
+    backgroundColor: '#121216',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#292929',
+    padding: 24,
+    marginHorizontal: 20,
+    minWidth: 300,
+    alignItems: 'center',
+  },
+  inviteModalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  inviteModalSubtitle: {
+    fontSize: 14,
+    color: '#CCCCCC',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 24,
+  },
+  inviteCodeContainer: {
+    backgroundColor: '#1A1A1A',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 24,
+    width: '100%',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#292929',
+  },
+  inviteCodeText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#4A90E2',
+    fontFamily: 'monospace',
+    letterSpacing: 2,
+  },
+  inviteModalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+    width: '100%',
+  },
+  inviteModalCancelButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    backgroundColor: '#292929',
+    alignItems: 'center',
+  },
+  inviteModalCancelText: {
+    fontSize: 16,
+    color: '#FFFFFF',
+    fontWeight: '500',
+  },
+  inviteModalCopyButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    backgroundColor: '#4A90E2',
+    alignItems: 'center',
+  },
+  inviteModalCopyText: {
+    fontSize: 16,
+    color: '#FFFFFF',
+    fontWeight: '500',
   },
 });

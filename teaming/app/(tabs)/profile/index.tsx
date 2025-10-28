@@ -14,12 +14,8 @@ import { StatusBar } from 'expo-status-bar';
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { logout as authLogout } from '../../../src/services/authService';
-import {
-  getUserInfo,
-  UserInfo,
-  logout,
-  withdraw,
-} from '../../../src/services/api';
+import { getUserInfo, UserInfo, withdraw } from '../../../src/services/api';
+import { clearTokens } from '../../../src/services/tokenManager';
 import apiClient from '../../../src/services/api';
 
 const { width } = Dimensions.get('window');
@@ -113,10 +109,7 @@ export default function MyPageScreen() {
           try {
             setIsLoggingOut(true);
 
-            // 서버에 리프레시 토큰 만료 요청
-            await logout();
-
-            // 로컬 토큰 삭제 및 로그아웃 처리
+            // 로컬 토큰 삭제 및 로그아웃 처리 (서버 로그아웃 API 포함)
             const success = await authLogout();
 
             if (success) {
@@ -153,8 +146,8 @@ export default function MyPageScreen() {
               // 서버에 회원 탈퇴 요청
               await withdraw();
 
-              // 로컬 토큰 삭제 및 로그아웃 처리
-              await authLogout();
+              // 로컬 토큰만 삭제 (로그아웃 API 호출하지 않음)
+              await clearTokens();
 
               Alert.alert('탈퇴 완료', '회원 탈퇴가 완료되었습니다.');
               router.replace('/(auth)');
@@ -201,7 +194,7 @@ export default function MyPageScreen() {
                 source={
                   avatarUrl
                     ? { uri: avatarUrl }
-                    : require('@/assets/images/(myPage)/myCat.jpeg')
+                    : require('@/assets/images/tmlogo.png')
                 }
                 style={styles.profileImage}
                 onError={() => {

@@ -45,6 +45,13 @@ export interface ChatMessage {
   [k: string]: any;
 }
 
+export interface ReadBoundaryUpdate {
+  roomId?: number;
+  userId: number;
+  lastReadMessageId?: number | null;
+  unreadCount: number;
+}
+
 // ====== 내부 상태 ======
 let client: Client | null = null;
 let currentToken: string | null = null;
@@ -244,6 +251,55 @@ export function subscribeRoomSock(
       console.log('[STOMP/SockJS] 구독 해제:', destination);
     } catch {}
     delete subs[String(roomId)];
+  };
+}
+
+// 읽음 경계 업데이트 구독
+export function subscribeRoomReadBoundary(
+  roomId: number,
+  onUpdate: (update: ReadBoundaryUpdate) => void
+): () => void {
+  const c = ensureClient();
+  if (!c.connected) {
+    console.warn('[STOMP/SockJS] Not connected yet, waiting for connection...');
+    const retrySubscribe = (): (() => void) => {
+      if (c.connected) {
+        return subscribeRoomReadBoundary(roomId, onUpdate);
+      } else {
+        setTimeout(() => retrySubscribe(), 1000);
+        return () => {};
+      }
+    };
+    return retrySubscribe();
+  }
+
+  const destination = `${SUB_PREFIX}${roomId}/read`;
+  console.log('[STOMP/SockJS] 읽음 경계 구독 시작:', destination);
+
+  const sub = c.subscribe(
+    destination,
+    (msg) => {
+      try {
+        console.log('[STOMP/SockJS] 읽음 경계 업데이트 수신:', msg.body);
+        const update = JSON.parse(msg.body) as ReadBoundaryUpdate;
+        onUpdate(update);
+      } catch (error) {
+        console.warn('[STOMP/SockJS] 읽음 경계 파싱 실패:', error);
+      }
+    },
+    {
+      Authorization: authHeaders().Authorization,
+      id: `sub-read-${roomId}-${Date.now()}`,
+    } as any
+  );
+
+  console.log('[STOMP/SockJS] 읽음 경계 구독 완료:', destination);
+
+  return () => {
+    try {
+      console.log('[STOMP/SockJS] 읽음 경계 구독 해제:', destination);
+      sub.unsubscribe();
+    } catch {}
   };
 }
 

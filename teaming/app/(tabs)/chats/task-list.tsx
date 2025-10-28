@@ -21,35 +21,43 @@ import { getAccessToken } from '@/src/services/tokenManager';
 const { width } = Dimensions.get('window');
 
 export default function TaskListScreen() {
-  const { roomId, isLeader } = useLocalSearchParams<{
+  const { roomId, isLeader, members } = useLocalSearchParams<{
     roomId: string;
     isLeader?: string;
+    members?: string;
   }>();
   const [tasks, setTasks] = useState<TaskWithMembers[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<number | null>(null);
+  const [roomMembers, setRoomMembers] = useState<any[]>([]);
   const isTeamLeader = isLeader === 'true';
 
-  // 멤버 정보 매핑 (실제로는 API에서 가져와야 함)
-  const memberMap = new Map<number, TaskMember>([
-    [1, { id: 1, name: '권민석', hasSubmitted: false }],
-    [2, { id: 2, name: '정치학존잘남', hasSubmitted: false }],
-    [3, { id: 3, name: '팀플하기싫다', hasSubmitted: false }],
-    [4, { id: 4, name: '최순조(팀장)', hasSubmitted: false }],
-  ]);
+  // members 정보 파싱
+  useEffect(() => {
+    if (members) {
+      try {
+        const membersData = JSON.parse(decodeURIComponent(members));
+        setRoomMembers(membersData);
+        console.log('📋 과제 목록 - 파싱된 members 데이터:', membersData);
+      } catch (error) {
+        console.error('❌ members 파싱 실패:', error);
+        setRoomMembers([]);
+      }
+    }
+  }, [members]);
 
   // 현재 사용자 정보 로드
   useEffect(() => {
     loadCurrentUserInfo();
   }, []);
 
-  // 과제 목록 로드 (화면 포커스 시마다 새로고침)
+  // 과제 목록 로드 (화면 포커스 시마다 새로고침, roomMembers 설정 후)
   useFocusEffect(
     React.useCallback(() => {
-      if (currentUserId !== null) {
+      if (currentUserId !== null && (roomMembers.length > 0 || !members)) {
         loadTasks();
       }
-    }, [currentUserId])
+    }, [currentUserId, roomMembers.length])
   );
 
   // JWT 토큰에서 사용자 ID 추출하는 함수
@@ -98,6 +106,18 @@ export default function TaskListScreen() {
 
       const tasks = await TaskService.getTasks(Number(roomId));
 
+      // 실제 roomMembers 정보를 TaskMember 형식으로 변환
+      const memberMap = new Map<number, TaskMember>();
+      roomMembers.forEach((member) => {
+        const name =
+          member.roomRole === 'LEADER' ? `${member.name}(팀장)` : member.name;
+        memberMap.set(member.memberId, {
+          id: member.memberId,
+          name: name,
+          hasSubmitted: false,
+        });
+      });
+
       // 백엔드 Task를 UI용 TaskWithMembers로 변환
       const transformedTasks = tasks.map((task) =>
         TaskService.transformTaskForUI(task, memberMap)
@@ -136,7 +156,22 @@ export default function TaskListScreen() {
       ],
     };
 
-    const transformedTask = TaskService.transformTaskForUI(mockTask, memberMap);
+    // 실제 roomMembers 정보를 TaskMember 형식으로 변환
+    const mockMemberMap = new Map<number, TaskMember>();
+    roomMembers.forEach((member) => {
+      const name =
+        member.roomRole === 'LEADER' ? `${member.name}(팀장)` : member.name;
+      mockMemberMap.set(member.memberId, {
+        id: member.memberId,
+        name: name,
+        hasSubmitted: false,
+      });
+    });
+
+    const transformedTask = TaskService.transformTaskForUI(
+      mockTask,
+      mockMemberMap
+    );
     setTasks([transformedTask]);
   };
 
@@ -146,7 +181,12 @@ export default function TaskListScreen() {
 
   const handleTaskPress = (taskId: number) => {
     // 모든 과제는 과제 확인 뷰로 이동 (제출 기능 포함)
-    router.push(`/(tabs)/chats/view-task?id=${taskId}&roomId=${roomId}`);
+    const membersParam = members
+      ? `&members=${encodeURIComponent(members as string)}`
+      : '';
+    router.push(
+      `/(tabs)/chats/view-task?id=${taskId}&roomId=${roomId}${membersParam}`
+    );
   };
 
   const handleDeleteTask = async (task: TaskWithMembers) => {

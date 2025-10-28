@@ -80,6 +80,15 @@ export default function GifticonScreen() {
     }
   };
 
+  // 현재 날짜를 YYYYMMDD 형식으로 반환
+  const getCurrentDateString = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}${month}${day}`;
+  };
+
   // 화면 포커스 시 데이터 로드
   useFocusEffect(
     useCallback(() => {
@@ -132,7 +141,7 @@ export default function GifticonScreen() {
 
         <View style={styles.gifticonDates}>
           <Text style={styles.dateText}>
-            받은 날짜: {formatDate('20240908')}
+            받은 날짜: {formatDate(getCurrentDateString())}
           </Text>
           <Text style={styles.dateText}>유효기간: {expirationDate}</Text>
         </View>

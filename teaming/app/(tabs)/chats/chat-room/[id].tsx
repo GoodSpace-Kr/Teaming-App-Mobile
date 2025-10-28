@@ -25,17 +25,20 @@ import { getAccessToken } from '@/src/services/tokenManager';
 import {
   connectSock,
   subscribeRoomSock,
+  subscribeRoomReadBoundary,
   sendTextSock,
   sendImageSock,
   sendFileSock,
   disconnectSock,
   updateSockToken,
   type ChatMessage,
+  type ReadBoundaryUpdate,
 } from '@/src/services/stompClient';
 import { UploadProgress } from '@/src/types/file';
 import {
   getMessageHistory,
   getUserInfo,
+  markRoomAsRead,
   type ChatMessage as ApiChatMessage,
 } from '@/src/services/api';
 import FileChatBubble from '@/src/components/FileChatBubble';
@@ -61,12 +64,13 @@ interface ChatRoomData {
 }
 
 export default function ChatRoomScreen() {
-  const { id, role, success, members, title } = useLocalSearchParams<{
+  const { id, role, success, members, title, ready } = useLocalSearchParams<{
     id: string;
     role?: string;
     success?: string;
     members?: string;
     title?: string;
+    ready?: string;
   }>();
   const [inputText, setInputText] = useState('');
   const [showFileMenu, setShowFileMenu] = useState(false);
@@ -309,33 +313,29 @@ export default function ChatRoomScreen() {
         }
 
         if (token) {
+          // 채팅방 읽음 처리 (unreadCount를 0으로 리셋)
+          markRoomAsRead(Number(id));
+
           // 메시지 히스토리 로드 (웹소켓 연결과 병렬로 실행)
           loadMessageHistory();
 
-          // SockJS 연결 시작
+          // 웹소켓이 이미 연결되어 있다고 가정하고 읽음 경계 구독만 시작
           setConnectionStatus('connecting');
+          setIsConnected(true);
+          setConnectionStatus('connected');
+          console.log('✅ 채팅방 진입 - 읽음 경계 구독 시작');
 
-          try {
-            await connectSock(token);
+          // 메시지 구독 및 읽음 경계 구독
+          setTimeout(() => {
+            console.log('🔔 채팅방 구독 시작 - 방 ID:', Number(id));
 
-            // connectSock이 성공했다면 연결된 것으로 간주
-            setIsConnected(true);
-            setConnectionStatus('connected');
-            console.log('✅ SockJS 연결 성공');
+            // 메시지 구독
+            const messageUnsubscribe = subscribeRoomSock(
+              Number(id),
+              (message) => {
+                console.log('📨 채팅방에서 새 메시지 수신:', message);
 
-            // 채팅방 구독 (연결 완료 후 약간의 지연)
-            setTimeout(() => {
-              console.log('🔔 구독 시작 - 방 ID:', Number(id));
-              const unsubscribe = subscribeRoomSock(Number(id), (message) => {
-                console.log('📨 새 메시지 수신:', message);
-                console.log('📨 메시지 타입:', typeof message);
-                console.log(
-                  '📨 메시지 내용:',
-                  JSON.stringify(message, null, 2)
-                );
                 setMessages((prev) => {
-                  console.log('📨 이전 메시지 개수:', prev.length);
-
                   // 중복 메시지 체크 (messageId로 확인)
                   const isDuplicate = prev.some(
                     (existingMessage) =>
@@ -367,21 +367,26 @@ export default function ChatRoomScreen() {
 
                   return newMessages;
                 });
-              });
-              console.log('🔔 구독 함수 반환됨');
+              }
+            );
 
-              // 컴포넌트 언마운트 시 정리
-              return () => {
-                console.log('🔔 구독 해제');
-                unsubscribe();
-                disconnectSock();
-              };
-            }, 1000);
-          } catch (error) {
-            console.error('SockJS 연결 실패:', error);
-            setConnectionStatus('error');
-            throw error;
-          }
+            // 읽음 경계 구독
+            const readUnsubscribe = subscribeRoomReadBoundary(
+              Number(id),
+              (update) => {
+                console.log('📊 읽음 경계 업데이트 수신:', update);
+              }
+            );
+
+            console.log('🔔 채팅방 구독 완료');
+
+            // 컴포넌트 언마운트 시 정리 (웹소켓 연결은 끊지 않음)
+            return () => {
+              console.log('🔔 채팅방 구독 해제');
+              messageUnsubscribe();
+              readUnsubscribe();
+            };
+          }, 1000);
         }
       } catch (error) {
         console.error('토큰 로드 또는 연결 실패:', error);
@@ -558,8 +563,9 @@ export default function ChatRoomScreen() {
         ? `&members=${encodeURIComponent(JSON.stringify(membersToPass))}`
         : '';
     const titleParam = title ? `&title=${encodeURIComponent(title)}` : '';
+    const readyParam = ready ? `&ready=${ready}` : '';
     router.push(
-      `/(tabs)/chats/chat-menu?roomId=${id}&isLeader=${isTeamLeader}&isCompleted=${isTeamCompleted}${membersParam}${titleParam}`
+      `/(tabs)/chats/chat-menu?roomId=${id}&isLeader=${isTeamLeader}&isCompleted=${isTeamCompleted}${membersParam}${titleParam}${readyParam}`
     );
   };
 
