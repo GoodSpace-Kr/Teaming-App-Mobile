@@ -149,7 +149,11 @@ export default function CreateTeamScreen() {
     // 2) 한 틱 대기해서 Modal의 visible=false가 반영되도록 함
     await new Promise((r) => setTimeout(r, 50));
 
-    // 3) 채팅방 목록으로 이동
+    // 3) 뒤로가기 (채팅방 생성 뷰에서 나가기)
+    router.back();
+
+    // 4) 잠시 대기 후 채팅방 목록으로 이동
+    await new Promise((r) => setTimeout(r, 100));
     router.push('/(tabs)/chats');
   };
 

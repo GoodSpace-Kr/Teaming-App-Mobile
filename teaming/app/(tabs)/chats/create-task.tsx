@@ -365,32 +365,6 @@ export default function CreateTaskScreen() {
               numberOfLines={4}
             />
           </View>
-
-          {/* 팀원 역할부여 */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>팀원 역할부여</Text>
-            {teamMembers.map((member) => (
-              <TouchableOpacity
-                key={member.id}
-                style={styles.memberItem}
-                onPress={() => handleMemberToggle(member.id)}
-              >
-                <Image source={member.avatar} style={styles.memberAvatar} />
-                <Text style={styles.memberName}>{member.name}</Text>
-                <View
-                  style={[
-                    styles.checkbox,
-                    member.isSelected && styles.checkboxSelected,
-                  ]}
-                >
-                  {member.isSelected && (
-                    <Ionicons name="checkmark" size={16} color="#FFFFFF" />
-                  )}
-                </View>
-              </TouchableOpacity>
-            ))}
-          </View>
-
           {/* 제한시간 설정 */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>제한시간 설정</Text>
@@ -477,6 +451,30 @@ export default function CreateTaskScreen() {
               </View>
             </View>
           </View>
+          {/* 팀원 역할부여 */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>팀원 역할부여</Text>
+            {teamMembers.map((member) => (
+              <TouchableOpacity
+                key={member.id}
+                style={styles.memberItem}
+                onPress={() => handleMemberToggle(member.id)}
+              >
+                <Image source={member.avatar} style={styles.memberAvatar} />
+                <Text style={styles.memberName}>{member.name}</Text>
+                <View
+                  style={[
+                    styles.checkbox,
+                    member.isSelected && styles.checkboxSelected,
+                  ]}
+                >
+                  {member.isSelected && (
+                    <Ionicons name="checkmark" size={16} color="#FFFFFF" />
+                  )}
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
         </ScrollView>
       )}
 
@@ -543,7 +541,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   textInput: {
-    backgroundColor: '#1A1A1A',
+    backgroundColor: '#121216',
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 12,
