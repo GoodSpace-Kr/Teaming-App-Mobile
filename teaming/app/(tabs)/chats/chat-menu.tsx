@@ -359,32 +359,95 @@ export default function ChatMenuScreen() {
 
           {isTeamLeader ? (
             <TouchableOpacity
-              style={styles.menuItem}
+              style={[
+                styles.menuItem,
+                !isRoomFull() && styles.menuItemDisabled,
+              ]}
               onPress={handleCreateTask}
+              disabled={!isRoomFull()}
             >
               <View style={styles.menuIcon}>
-                <Ionicons name="add-circle" size={24} color="#007AFF" />
+                <Ionicons
+                  name="add-circle"
+                  size={24}
+                  color={isRoomFull() ? '#007AFF' : '#666666'}
+                />
               </View>
-              <Text style={styles.menuText}>과제 생성하기</Text>
-              <Ionicons name="chevron-forward" size={20} color="#666666" />
+              <Text
+                style={[
+                  styles.menuText,
+                  !isRoomFull() && styles.menuTextDisabled,
+                ]}
+              >
+                과제 생성하기
+              </Text>
+              <Ionicons
+                name="chevron-forward"
+                size={20}
+                color={isRoomFull() ? '#666666' : '#333333'}
+              />
             </TouchableOpacity>
           ) : (
-            <TouchableOpacity style={styles.menuItem} onPress={handleViewTasks}>
+            <TouchableOpacity
+              style={[
+                styles.menuItem,
+                !isRoomFull() && styles.menuItemDisabled,
+              ]}
+              onPress={handleViewTasks}
+              disabled={!isRoomFull()}
+            >
               <View style={styles.menuIcon}>
-                <Ionicons name="document-text" size={24} color="#007AFF" />
+                <Ionicons
+                  name="document-text"
+                  size={24}
+                  color={isRoomFull() ? '#007AFF' : '#666666'}
+                />
               </View>
-              <Text style={styles.menuText}>과제방</Text>
-              <Ionicons name="chevron-forward" size={20} color="#666666" />
+              <Text
+                style={[
+                  styles.menuText,
+                  !isRoomFull() && styles.menuTextDisabled,
+                ]}
+              >
+                과제방
+              </Text>
+              <Ionicons
+                name="chevron-forward"
+                size={20}
+                color={isRoomFull() ? '#666666' : '#333333'}
+              />
             </TouchableOpacity>
           )}
 
           {isTeamLeader && (
-            <TouchableOpacity style={styles.menuItem} onPress={handleViewTasks}>
+            <TouchableOpacity
+              style={[
+                styles.menuItem,
+                !isRoomFull() && styles.menuItemDisabled,
+              ]}
+              onPress={handleViewTasks}
+              disabled={!isRoomFull()}
+            >
               <View style={styles.menuIcon}>
-                <Ionicons name="document-text" size={24} color="#007AFF" />
+                <Ionicons
+                  name="document-text"
+                  size={24}
+                  color={isRoomFull() ? '#007AFF' : '#666666'}
+                />
               </View>
-              <Text style={styles.menuText}>과제방</Text>
-              <Ionicons name="chevron-forward" size={20} color="#666666" />
+              <Text
+                style={[
+                  styles.menuText,
+                  !isRoomFull() && styles.menuTextDisabled,
+                ]}
+              >
+                과제방
+              </Text>
+              <Ionicons
+                name="chevron-forward"
+                size={20}
+                color={isRoomFull() ? '#666666' : '#333333'}
+              />
             </TouchableOpacity>
           )}
         </View>
@@ -421,33 +484,35 @@ export default function ChatMenuScreen() {
         </View>
 
         {/* 팀플 완료 또는 나가기 */}
-        <View style={styles.section}>
-          {isTeamCompleted ? (
-            // 팀플 완료 후 - 모든 사용자가 방을 떠날 수 있음
-            <TouchableOpacity
-              style={styles.leaveButton}
-              onPress={handleLeaveRoom}
-            >
-              <View style={styles.leaveIcon}>
-                <Ionicons name="exit" size={24} color="#FF3B30" />
-              </View>
-              <Text style={styles.leaveText}>티밍룸 나가기</Text>
-              <Ionicons name="chevron-forward" size={20} color="#666666" />
-            </TouchableOpacity>
-          ) : isTeamLeader && isRoomFull() ? (
-            // 팀플 완료 전 - 팀장만 팀플 완료 가능 (전 인원 입장 시에만 표시)
-            <TouchableOpacity
-              style={styles.completeButton}
-              onPress={handleCompleteTeam}
-            >
-              <View style={styles.completeIcon}>
-                <Ionicons name="trophy" size={24} color="#FFD700" />
-              </View>
-              <Text style={styles.completeText}>팀플 완료</Text>
-              <Ionicons name="chevron-forward" size={20} color="#666666" />
-            </TouchableOpacity>
-          ) : null}
-        </View>
+        {(isTeamCompleted || (isTeamLeader && isRoomFull())) && (
+          <View style={styles.section}>
+            {isTeamCompleted ? (
+              // 팀플 완료 후 - 모든 사용자가 방을 떠날 수 있음
+              <TouchableOpacity
+                style={styles.leaveButton}
+                onPress={handleLeaveRoom}
+              >
+                <View style={styles.leaveIcon}>
+                  <Ionicons name="exit" size={24} color="#FF3B30" />
+                </View>
+                <Text style={styles.leaveText}>티밍룸 나가기</Text>
+                <Ionicons name="chevron-forward" size={20} color="#666666" />
+              </TouchableOpacity>
+            ) : isTeamLeader && isRoomFull() ? (
+              // 팀플 완료 전 - 팀장만 팀플 완료 가능 (전 인원 입장 시에만 표시)
+              <TouchableOpacity
+                style={styles.completeButton}
+                onPress={handleCompleteTeam}
+              >
+                <View style={styles.completeIcon}>
+                  <Ionicons name="trophy" size={24} color="#FFD700" />
+                </View>
+                <Text style={styles.completeText}>팀플 완료</Text>
+                <Ionicons name="chevron-forward" size={20} color="#666666" />
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        )}
       </ScrollView>
       {/* 팀플 완료 확인 모달 */}
       <CompleteTeamModal
@@ -594,6 +659,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#FFFFFF',
     fontWeight: '500',
+  },
+  menuItemDisabled: {
+    opacity: 0.5,
+  },
+  menuTextDisabled: {
+    color: '#666666',
   },
   sectionTitle: {
     fontSize: 16,
