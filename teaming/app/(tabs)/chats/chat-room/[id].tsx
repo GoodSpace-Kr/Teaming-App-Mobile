@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   TouchableOpacity,
   TextInput,
   Image,
@@ -13,6 +12,7 @@ import {
   Modal,
   Alert,
   ActivityIndicator,
+  FlatList,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StatusBar } from 'expo-status-bar';
@@ -112,7 +112,9 @@ export default function ChatRoomScreen() {
   const [actualMembers, setActualMembers] = useState<any[]>([]);
   const [showTeamCompleteModal, setShowTeamCompleteModal] = useState(false);
   const [teamCompleteTeamName, setTeamCompleteTeamName] = useState<string>('');
-  const scrollViewRef = useRef<ScrollView>(null);
+  const listRef = useRef<FlatList<any>>(null);
+  // 입력 바(플러스+텍스트박스+전송버튼) 실제 높이 → 리스트 여백에 반영
+  const [inputBarHeight, setInputBarHeight] = useState(52);
 
   // JWT 토큰에서 사용자 ID 추출하는 함수
   const getUserIdFromToken = (token: string): number | null => {
@@ -208,7 +210,7 @@ export default function ChatRoomScreen() {
 
       // 히스토리 로드 후 스크롤을 맨 아래로
       setTimeout(() => {
-        scrollViewRef.current?.scrollToEnd({ animated: false });
+        listRef.current?.scrollToOffset({ offset: 0, animated: false });
       }, 200);
     } catch (error) {
       console.log('⚠️ 메시지 히스토리 로드 실패 (무시됨):', error);
@@ -372,7 +374,10 @@ export default function ChatRoomScreen() {
 
                   // 새 메시지가 추가되면 자동으로 스크롤을 맨 아래로
                   setTimeout(() => {
-                    scrollViewRef.current?.scrollToEnd({ animated: true });
+                    listRef.current?.scrollToOffset({
+                      offset: 0,
+                      animated: true,
+                    });
                   }, 100);
 
                   return newMessages;
@@ -596,7 +601,7 @@ export default function ChatRoomScreen() {
 
         // 스크롤을 맨 아래로
         setTimeout(() => {
-          scrollViewRef.current?.scrollToEnd({ animated: true });
+          listRef.current?.scrollToOffset({ offset: 0, animated: true });
         }, 100);
       } catch (error) {
         console.error('❌ 메시지 전송 실패:', error);
@@ -836,7 +841,7 @@ export default function ChatRoomScreen() {
 
       // 스크롤을 맨 아래로
       setTimeout(() => {
-        scrollViewRef.current?.scrollToEnd({ animated: true });
+        listRef.current?.scrollToOffset({ offset: 0, animated: true });
       }, 100);
     } catch (error: any) {
       console.error('❌ 파일 업로드 실패:', error);
@@ -961,19 +966,31 @@ export default function ChatRoomScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
       >
-        <ScrollView
-          ref={scrollViewRef}
+        <FlatList
+          ref={listRef}
+          data={[...displayMessages].reverse()}
+          inverted
+          keyExtractor={(m) => String(m.id)}
+          renderItem={({ item, index }) => renderMessage(item, index)}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
           style={styles.messagesContainer}
           contentContainerStyle={styles.messagesContent}
-          showsVerticalScrollIndicator={false}
-        >
-          {displayMessages.map((message, index) =>
-            renderMessage(message, index)
-          )}
-        </ScrollView>
+          onContentSizeChange={() => {
+            // 새 메시지/초기 로딩 때 하단 고정
+            listRef.current?.scrollToOffset({ offset: 0, animated: true });
+          }}
+        />
 
         {/* 메시지 입력창 */}
-        <View style={styles.inputContainer}>
+        <View
+          style={styles.inputContainer}
+          onLayout={(e) => {
+            const h = e.nativeEvent.layout.height;
+            // 급격한 튐 방지용 클램프
+            setInputBarHeight(Math.max(44, Math.min(140, h)));
+          }}
+        >
           <TouchableOpacity
             style={styles.plusButton}
             onPress={() => setShowFileMenu(true)}
