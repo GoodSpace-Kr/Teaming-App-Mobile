@@ -434,8 +434,8 @@ export default function ChatMenuScreen() {
               <Text style={styles.leaveText}>티밍룸 나가기</Text>
               <Ionicons name="chevron-forward" size={20} color="#666666" />
             </TouchableOpacity>
-          ) : isTeamLeader ? (
-            // 팀플 완료 전 - 팀장만 팀플 완료 가능
+          ) : isTeamLeader && isRoomFull() ? (
+            // 팀플 완료 전 - 팀장만 팀플 완료 가능 (전 인원 입장 시에만 표시)
             <TouchableOpacity
               style={styles.completeButton}
               onPress={handleCompleteTeam}
