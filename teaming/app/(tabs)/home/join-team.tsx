@@ -153,7 +153,8 @@ export default function JoinTeamScreen() {
               onChangeText={setRoomCode}
               placeholder="티밍룸 번호를 입력해주세요"
               placeholderTextColor="#666666"
-              keyboardType="numeric"
+              autoCapitalize="characters"
+              autoCorrect={false}
             />
             <TouchableOpacity
               style={[

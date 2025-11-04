@@ -260,7 +260,6 @@ export class TaskService {
 
     return {
       ...task,
-      id: task.assignmentId, // UI에서 사용하는 id 필드
       assignedMembers,
       createdBy: '팀장', // TODO: 실제 생성자 정보 가져오기
       createdAt: new Date().toISOString(), // TODO: 실제 생성일 가져오기

@@ -42,6 +42,9 @@ export interface ChatRoom {
   paymentStatus: 'NOT_PAID' | 'PAID' | 'REFUNDED';
   success: boolean;
   members: ChatMember[];
+  ready: {
+    everyMemberEntered: boolean;
+  };
 }
 
 /**

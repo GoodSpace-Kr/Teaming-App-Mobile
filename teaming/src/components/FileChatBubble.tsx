@@ -16,9 +16,9 @@ import * as Sharing from 'expo-sharing';
 
 interface FileAttachment {
   fileId: number;
-  fileName: string;
-  contentType: string;
-  size?: number;
+  name: string;
+  mimeType: string;
+  byteSize?: number;
 }
 
 interface FileChatBubbleProps {
@@ -48,7 +48,65 @@ export default function FileChatBubble({
   const [downloadUrls, setDownloadUrls] = useState<{ [key: number]: string }>(
     {}
   );
+  // ── 표시용 유틸 ────────────────────────────────────────────────────────────────
+  const extFromMime = (mt?: string) => {
+    if (!mt) return '';
+    const map: Record<string, string> = {
+      'image/jpeg': 'jpg',
+      'image/png': 'png',
+      'image/webp': 'webp',
+      'image/gif': 'gif',
+      'application/pdf': 'pdf',
+      'video/mp4': 'mp4',
+      'video/quicktime': 'mov',
+      'audio/mpeg': 'mp3',
+      'audio/wav': 'wav',
+    };
+    return map[mt] ? `.${map[mt]}` : '';
+  };
+  const displayName = (att: FileAttachment, idx: number) => {
+    if (att.name && att.name !== '___') return att.name;
+    const base = att.mimeType?.startsWith('image/')
+      ? '이미지'
+      : att.mimeType?.startsWith('video/')
+      ? '동영상'
+      : att.mimeType?.startsWith('audio/')
+      ? '오디오'
+      : '파일';
+    return `${base}${att.fileId ?? idx}${extFromMime(att.mimeType)}`;
+  };
 
+  const truncateFileName = (fileName: string) => {
+    if (fileName.length <= 25) return fileName;
+
+    // 확장자 추출
+    const lastDotIndex = fileName.lastIndexOf('.');
+    if (lastDotIndex === -1) {
+      // 확장자가 없으면 25글자에서 자르고 ... 추가
+      return fileName.substring(0, 22) + '...';
+    }
+
+    const nameWithoutExt = fileName.substring(0, lastDotIndex);
+    const extension = fileName.substring(lastDotIndex);
+
+    // 확장자를 제외한 이름이 22글자 이하면 그대로 반환
+    if (nameWithoutExt.length <= 22) return fileName;
+
+    // 확장자를 제외한 이름을 22글자로 자르고 ... + 확장자
+    return nameWithoutExt.substring(0, 22) + '...' + extension;
+  };
+  const formatFileSizeLocal = (size?: number) => {
+    // 0도 유효하게 표시
+    if (typeof size !== 'number' || size < 0) return '';
+    const units = ['B', 'KB', 'MB', 'GB'];
+    let s = size,
+      i = 0;
+    while (s >= 1024 && i < units.length - 1) {
+      s /= 1024;
+      i++;
+    }
+    return `${s.toFixed(s >= 100 ? 0 : s >= 10 ? 1 : 2)} ${units[i]}`;
+  };
   const bubbleStyle: ViewStyle = {
     backgroundColor,
     borderRadius: 16,
@@ -103,12 +161,12 @@ export default function FileChatBubble({
   };
 
   const handleFileAction = async (attachment: FileAttachment, url: string) => {
-    const { fileName } = attachment;
+    const { name } = attachment;
 
     // 모든 파일을 다운로드 후 공유
     try {
-      const localUri = await downloadFile(url, fileName);
-      await shareFile(localUri, fileName);
+      const localUri = await downloadFile(url, name);
+      await shareFile(localUri, name);
     } catch (error) {
       console.error('❌ 파일 다운로드 실패:', error);
       Alert.alert('오류', '파일을 다운로드할 수 없습니다.');
@@ -156,8 +214,8 @@ export default function FileChatBubble({
 
   const renderFileAttachment = (attachment: FileAttachment, index: number) => {
     const isDownloading = downloading[attachment.fileId];
-    const iconName = getFileIcon(attachment.contentType);
-    const iconColor = getFileIconColor(attachment.contentType);
+    const iconName = getFileIcon(attachment.mimeType);
+    const iconColor = getFileIconColor(attachment.mimeType);
 
     return (
       <TouchableOpacity
@@ -186,11 +244,13 @@ export default function FileChatBubble({
             style={[styles.fileName, { color: textColor }]}
             numberOfLines={1}
           >
-            {attachment.fileName}
+            {attachment.name === '___'
+              ? '이미지 파일'
+              : truncateFileName(attachment.name)}
           </Text>
-          {attachment.size && (
+          {attachment.byteSize && (
             <Text style={styles.fileSize}>
-              용량: {formatFileSize(attachment.size)}
+              용량: {formatFileSize(attachment.byteSize)}
             </Text>
           )}
         </View>
@@ -286,8 +346,8 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   fileInfo: {
-    flex: 1,
     justifyContent: 'center',
+    maxWidth: 600,
   },
   fileName: {
     fontSize: 16,

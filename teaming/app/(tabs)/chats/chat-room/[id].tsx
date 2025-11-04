@@ -14,6 +14,7 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StatusBar } from 'expo-status-bar';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -24,20 +25,25 @@ import { getAccessToken } from '@/src/services/tokenManager';
 import {
   connectSock,
   subscribeRoomSock,
+  subscribeRoomReadBoundary,
   sendTextSock,
   sendImageSock,
   sendFileSock,
   disconnectSock,
   updateSockToken,
+  isConnected as isWebSocketConnected,
+  waitForConnection,
   type ChatMessage,
+  type ReadBoundaryUpdate,
 } from '@/src/services/stompClient';
 import { UploadProgress } from '@/src/types/file';
 import {
   getMessageHistory,
   getUserInfo,
+  markRoomAsRead,
   type ChatMessage as ApiChatMessage,
 } from '@/src/services/api';
-
+import FileChatBubble from '@/src/components/FileChatBubble';
 const { width, height } = Dimensions.get('window');
 
 interface Message {
@@ -60,15 +66,35 @@ interface ChatRoomData {
 }
 
 export default function ChatRoomScreen() {
-  const { id, role, success, members, title } = useLocalSearchParams<{
+  const { id, role, success, members, title, ready } = useLocalSearchParams<{
     id: string;
     role?: string;
     success?: string;
     members?: string;
     title?: string;
+    ready?: string;
   }>();
   const [inputText, setInputText] = useState('');
   const [showFileMenu, setShowFileMenu] = useState(false);
+
+  // 텍스트 입력창 높이 계산
+  const getInputHeight = (text: string) => {
+    const baseHeight = 44; // 기본 높이
+    const lineHeight = 22; // 한 줄 높이
+    const maxLines = 4; // 최대 줄 수
+
+    if (!text) return baseHeight;
+
+    // 줄바꿈 개수 계산
+    const lineBreaks = (text.match(/\n/g) || []).length;
+    // 텍스트 길이로 대략적인 줄 수 계산 (한 줄당 약 20자)
+    const estimatedLines = Math.ceil(text.length / 20);
+    const totalLines = Math.max(lineBreaks + 1, estimatedLines);
+
+    const calculatedHeight =
+      baseHeight + Math.min(totalLines - 1, maxLines - 1) * lineHeight;
+    return Math.min(calculatedHeight, baseHeight + (maxLines - 1) * lineHeight);
+  };
   const [jwt, setJwt] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
@@ -84,6 +110,8 @@ export default function ChatRoomScreen() {
   const [currentUserName, setCurrentUserName] = useState<string>('');
   const [isTeamCompleted, setIsTeamCompleted] = useState(false);
   const [actualMembers, setActualMembers] = useState<any[]>([]);
+  const [showTeamCompleteModal, setShowTeamCompleteModal] = useState(false);
+  const [teamCompleteTeamName, setTeamCompleteTeamName] = useState<string>('');
   const scrollViewRef = useRef<ScrollView>(null);
 
   // JWT 토큰에서 사용자 ID 추출하는 함수
@@ -205,7 +233,7 @@ export default function ChatRoomScreen() {
     loadCurrentUserInfo();
   }, []);
 
-  // role 및 success 정보 로깅
+  // role 및 success 정보 로깅 및 팀플 완료 모달 처리
   useEffect(() => {
     if (role) {
       console.log('👑 채팅방에서 사용자 역할:', role);
@@ -216,8 +244,37 @@ export default function ChatRoomScreen() {
       const isCompleted = success === 'true';
       setIsTeamCompleted(isCompleted);
       console.log('🏠 채팅방 완료 상태:', isCompleted);
+
+      // 팀플이 완료된 경우 모달 표시 여부 확인
+      if (isCompleted) {
+        checkAndShowSuccessModal();
+      }
     }
   }, [role, id, success]);
+
+  // 팀플 완료 모달 표시 여부 확인 및 표시
+  const checkAndShowSuccessModal = async () => {
+    try {
+      const storageKey = `success_modal_${id}`;
+      const hasSeenModal = await AsyncStorage.getItem(storageKey);
+
+      if (!hasSeenModal) {
+        // 아직 모달을 보지 않은 경우에만 표시
+        console.log('🎉 팀플 완료 모달 표시');
+        setTeamCompleteTeamName(
+          title ? decodeURIComponent(title) : '정치학 발표'
+        );
+        setShowTeamCompleteModal(true);
+
+        // 모달을 봤다는 기록 저장
+        await AsyncStorage.setItem(storageKey, 'true');
+      } else {
+        console.log('📝 이미 팀플 완료 모달을 본 채팅방');
+      }
+    } catch (error) {
+      console.error('❌ 팀플 완료 모달 체크 실패:', error);
+    }
+  };
 
   // 채팅방 정보 로드
   useEffect(() => {
@@ -258,33 +315,37 @@ export default function ChatRoomScreen() {
         }
 
         if (token) {
+          // 채팅방 읽음 처리 (unreadCount를 0으로 리셋)
+          markRoomAsRead(Number(id));
+
           // 메시지 히스토리 로드 (웹소켓 연결과 병렬로 실행)
           loadMessageHistory();
 
-          // SockJS 연결 시작
+          // 웹소켓 연결 상태 확인
           setConnectionStatus('connecting');
+          console.log('🔍 웹소켓 연결 상태 확인 중...');
 
-          try {
-            await connectSock(token);
-
-            // connectSock이 성공했다면 연결된 것으로 간주
+          if (isWebSocketConnected()) {
             setIsConnected(true);
             setConnectionStatus('connected');
-            console.log('✅ SockJS 연결 성공');
+            console.log('✅ 채팅방 진입 - 웹소켓 연결 확인 완료');
+          } else {
+            console.log('⚠️ 웹소켓 연결되지 않음 - 구독 시도');
+            setIsConnected(false);
+            setConnectionStatus('disconnected');
+          }
 
-            // 채팅방 구독 (연결 완료 후 약간의 지연)
-            setTimeout(() => {
-              console.log('🔔 구독 시작 - 방 ID:', Number(id));
-              const unsubscribe = subscribeRoomSock(Number(id), (message) => {
-                console.log('📨 새 메시지 수신:', message);
-                console.log('📨 메시지 타입:', typeof message);
-                console.log(
-                  '📨 메시지 내용:',
-                  JSON.stringify(message, null, 2)
-                );
+          // 메시지 구독 및 읽음 경계 구독
+          setTimeout(() => {
+            console.log('🔔 채팅방 구독 시작 - 방 ID:', Number(id));
+
+            // 메시지 구독
+            const messageUnsubscribe = subscribeRoomSock(
+              Number(id),
+              (message) => {
+                console.log('📨 채팅방에서 새 메시지 수신:', message);
+
                 setMessages((prev) => {
-                  console.log('📨 이전 메시지 개수:', prev.length);
-
                   // 중복 메시지 체크 (messageId로 확인)
                   const isDuplicate = prev.some(
                     (existingMessage) =>
@@ -316,21 +377,26 @@ export default function ChatRoomScreen() {
 
                   return newMessages;
                 });
-              });
-              console.log('🔔 구독 함수 반환됨');
+              }
+            );
 
-              // 컴포넌트 언마운트 시 정리
-              return () => {
-                console.log('🔔 구독 해제');
-                unsubscribe();
-                disconnectSock();
-              };
-            }, 1000);
-          } catch (error) {
-            console.error('SockJS 연결 실패:', error);
-            setConnectionStatus('error');
-            throw error;
-          }
+            // 읽음 경계 구독
+            const readUnsubscribe = subscribeRoomReadBoundary(
+              Number(id),
+              (update) => {
+                console.log('📊 읽음 경계 업데이트 수신:', update);
+              }
+            );
+
+            console.log('🔔 채팅방 구독 완료');
+
+            // 컴포넌트 언마운트 시 정리 (웹소켓 연결은 끊지 않음)
+            return () => {
+              console.log('🔔 채팅방 구독 해제');
+              messageUnsubscribe();
+              readUnsubscribe();
+            };
+          }, 1000);
         }
       } catch (error) {
         console.error('토큰 로드 또는 연결 실패:', error);
@@ -372,9 +438,9 @@ export default function ChatRoomScreen() {
     const formattedAttachments = (msg.attachments || []).map(
       (attachment: any) => ({
         fileId: attachment.fileId,
-        fileName: msg.content, // msg.content에서 파일명 가져오기
-        contentType: attachment.mimeType,
-        size: attachment.byteSize,
+        name: attachment.name, // attachment.name 사용
+        mimeType: attachment.mimeType,
+        byteSize: attachment.byteSize, // byteSize 사용
       })
     );
 
@@ -507,8 +573,9 @@ export default function ChatRoomScreen() {
         ? `&members=${encodeURIComponent(JSON.stringify(membersToPass))}`
         : '';
     const titleParam = title ? `&title=${encodeURIComponent(title)}` : '';
+    const readyParam = ready ? `&ready=${ready}` : '';
     router.push(
-      `/(tabs)/chats/chat-menu?roomId=${id}&isLeader=${isTeamLeader}&isCompleted=${isTeamCompleted}${membersParam}${titleParam}`
+      `/(tabs)/chats/chat-menu?roomId=${id}&isLeader=${isTeamLeader}&isCompleted=${isTeamCompleted}${membersParam}${titleParam}${readyParam}`
     );
   };
 
@@ -799,9 +866,8 @@ export default function ChatRoomScreen() {
 
     // 사용자 정보 표시: 첫 번째 메시지이거나 다른 사람이거나 다른 시간대
     const showUserInfo = !isContinuous && !message.isMe;
-
-    // 꼬리 표시: 다른 사람의 첫 번째 메시지 (연속 메시지가 아닌 경우)
     const showTail = !message.isMe && !isContinuous;
+    const isFileLike = (message.attachments?.length ?? 0) > 0;
 
     return (
       <View key={message.id} style={styles.messageContainer}>
@@ -812,17 +878,29 @@ export default function ChatRoomScreen() {
           </View>
         )}
 
-        <ChatBubble
-          text={message.text}
-          isMe={message.isMe}
-          showTail={showTail}
-          isContinuous={isContinuous}
-          timestamp={message.timestamp}
-          attachments={message.attachments}
-          // readCount={message.readCount} // 주석 처리 (나중에 사용 예정)
-          backgroundColor={message.isMe ? '#007AFF' : '#121216'}
-          textColor="#FFFFFF"
-        />
+        {isFileLike ? (
+          <FileChatBubble
+            attachments={message.attachments!}
+            isMe={message.isMe}
+            showTail={showTail}
+            isContinuous={isContinuous}
+            timestamp={message.timestamp}
+            backgroundColor={message.isMe ? '#007AFF' : '#121216'}
+            textColor="#FFFFFF"
+          />
+        ) : (
+          <ChatBubble
+            text={message.text}
+            isMe={message.isMe}
+            showTail={showTail}
+            isContinuous={isContinuous}
+            timestamp={message.timestamp}
+            attachments={message.attachments}
+            // readCount={message.readCount} // 주석 처리 (나중에 사용 예정)
+            backgroundColor={message.isMe ? '#007AFF' : '#121216'}
+            textColor="#FFFFFF"
+          />
+        )}
       </View>
     );
   };
@@ -870,21 +948,7 @@ export default function ChatRoomScreen() {
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>{chatRoomData.title}</Text>
-          <View style={styles.connectionStatus}>
-            <View
-              style={[
-                styles.statusDot,
-                { backgroundColor: isConnected ? '#4CAF50' : '#FF6B6B' },
-              ]}
-            />
-            <Text style={styles.statusText}>
-              {isConnected
-                ? '연결됨'
-                : connectionStatus === 'connecting'
-                ? '연결 중...'
-                : '연결 끊김'}
-            </Text>
-          </View>
+          <View style={styles.connectionStatus}></View>
         </View>
         <TouchableOpacity onPress={handleMenuPress} style={styles.menuButton}>
           <Ionicons name="ellipsis-horizontal" size={24} color="#FFFFFF" />
@@ -918,13 +982,14 @@ export default function ChatRoomScreen() {
           </TouchableOpacity>
 
           <TextInput
-            style={styles.textInput}
+            style={[styles.textInput, { height: getInputHeight(inputText) }]}
             value={inputText}
             onChangeText={setInputText}
             placeholder="메시지를 입력하세요"
             placeholderTextColor="#666666"
             multiline
             maxLength={500}
+            textAlignVertical="top"
           />
 
           <TouchableOpacity
@@ -1102,6 +1167,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 8,
+    marginBottom: 7,
     borderWidth: 1,
     borderColor: '#292929',
   },
@@ -1112,16 +1178,18 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#292929',
     paddingHorizontal: 16,
-    paddingVertical: 8,
-    fontSize: 12,
+    paddingVertical: 12,
+    fontSize: 16,
     color: '#FFFFFF',
-    maxHeight: 50,
+    minHeight: 44, // 최소 높이 설정
+    maxHeight: 132, // 최대 높이 설정 (3줄 정도)
     marginRight: 12,
   },
   sendButton: {
     width: 30,
     height: 30,
     borderRadius: 20,
+    marginBottom: 7,
     alignItems: 'center',
     justifyContent: 'center',
   },

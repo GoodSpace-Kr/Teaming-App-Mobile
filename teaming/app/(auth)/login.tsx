@@ -13,7 +13,6 @@ import {
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
-import * as SecureStore from 'expo-secure-store';
 import KakaoLoginWebView from '../../src/components/KakaoLoginWebView';
 import GoogleLoginWebView from '../../src/components/GoogleLoginWebView';
 import NaverLoginWebView from '../../src/components/NaverLoginWebView';

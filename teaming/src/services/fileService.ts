@@ -7,6 +7,7 @@ import {
   FileDownloadUrlResponse,
   UploadProgress,
   FileItem,
+  RoomFileResponse,
 } from '@/src/types/file';
 
 /**
@@ -237,6 +238,29 @@ export class FileService {
   }
 
   /**
+   * 자료실 파일 목록 조회
+   * @param roomId 채팅방 ID
+   * @returns 파일 목록
+   */
+  static async getRoomFiles(roomId: number): Promise<RoomFileResponse[]> {
+    try {
+      console.log('🚀 자료실 파일 목록 조회:', { roomId });
+
+      const response = await apiClient.get<RoomFileResponse[]>(
+        `/rooms/${roomId}/files`
+      );
+
+      console.log('✅ 자료실 파일 목록 조회 성공:', response.data);
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ 자료실 파일 목록 조회 실패:', error);
+      console.error('에러 상태:', error.response?.status);
+      console.error('에러 데이터:', error.response?.data);
+      throw error;
+    }
+  }
+
+  /**
    * 파일 크기 포맷팅
    * @param bytes 바이트 크기
    * @returns 포맷된 크기 문자열
@@ -295,5 +319,71 @@ export class FileService {
       'video/mov': '#AF52DE',
     };
     return colorMap[contentType] || '#8E8E93';
+  }
+
+  /**
+   * 백엔드 API 응답을 FileItem 형태로 변환
+   * @param roomFile 백엔드 파일 응답
+   * @returns FileItem 형태의 파일 정보
+   */
+  static convertRoomFileToFileItem(roomFile: RoomFileResponse): FileItem {
+    return {
+      id: roomFile.fileId.toString(),
+      name: roomFile.name,
+      size: roomFile.byteSize,
+      type: roomFile.mimeType,
+      uploadedBy: `사용자 ${roomFile.uploaderId}`, // TODO: 실제 사용자명으로 교체 필요
+      uploadedAt: '방금 전', // TODO: 실제 업로드 시간으로 교체 필요
+      fileIcon: this.getFileIconByType(roomFile.type),
+      fileId: roomFile.fileId,
+    };
+  }
+
+  /**
+   * 백엔드 파일 타입을 MIME 타입으로 변환
+   * @param fileType 백엔드 파일 타입
+   * @returns MIME 타입
+   */
+  static convertFileTypeToMimeType(fileType: string): string {
+    const typeMap: { [key: string]: string } = {
+      IMAGE: 'image/jpeg',
+      VIDEO: 'video/mp4',
+      AUDIO: 'audio/mpeg',
+      DOCUMENT: 'application/pdf',
+      OTHER: 'application/octet-stream',
+    };
+    return typeMap[fileType] || 'application/octet-stream';
+  }
+
+  /**
+   * 백엔드 파일 타입에 따른 아이콘 반환
+   * @param fileType 백엔드 파일 타입
+   * @returns 아이콘 이름
+   */
+  static getFileIconByType(fileType: string): string {
+    const iconMap: { [key: string]: string } = {
+      IMAGE: 'image',
+      VIDEO: 'videocam',
+      AUDIO: 'musical-notes',
+      DOCUMENT: 'document',
+      OTHER: 'document',
+    };
+    return iconMap[fileType] || 'document';
+  }
+
+  /**
+   * 백엔드 파일 타입에 따른 색상 반환
+   * @param fileType 백엔드 파일 타입
+   * @returns 색상 코드
+   */
+  static getFileIconColorByType(fileType: string): string {
+    const colorMap: { [key: string]: string } = {
+      IMAGE: '#FF2D92',
+      VIDEO: '#AF52DE',
+      AUDIO: '#FF9500',
+      DOCUMENT: '#007AFF',
+      OTHER: '#8E8E93',
+    };
+    return colorMap[fileType] || '#8E8E93';
   }
 }
