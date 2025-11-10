@@ -10,7 +10,7 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "buildNumber": "21",
+      "buildNumber": "23",
       "supportsTablet": true,
       "bundleIdentifier": "com.teaming.app",
       "infoPlist": {

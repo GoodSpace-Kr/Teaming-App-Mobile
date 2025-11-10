@@ -142,7 +142,12 @@ export default function ChatMenuScreen() {
   const handleViewTasks = () => {
     // 과제 목록 화면으로 이동
     const isLeaderParam = isLeader ? `&isLeader=${isLeader}` : '';
-    router.push(`/(tabs)/chats/task-list?roomId=${roomId}${isLeaderParam}`);
+    const membersParam = members
+      ? `&members=${encodeURIComponent(members as string)}`
+      : '';
+    router.push(
+      `/(tabs)/chats/task-list?roomId=${roomId}${isLeaderParam}${membersParam}`
+    );
   };
 
   const handleLeaveRoom = () => {

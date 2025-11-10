@@ -35,9 +35,27 @@ export default function CreateTaskScreen() {
   }>();
   const [taskTitle, setTaskTitle] = useState('');
   const [taskDescription, setTaskDescription] = useState('');
-  const [selectedMonth, setSelectedMonth] = useState('09');
-  const [selectedDay, setSelectedDay] = useState('07');
-  const [selectedTime, setSelectedTime] = useState('07:00');
+  // 현재 시간을 기준으로 초기값 설정 (30분 단위로 반올림)
+  const getCurrentDateTime = () => {
+    const now = new Date();
+    // 분을 30분 단위로 반올림
+    const minutes = Math.round(now.getMinutes() / 30) * 30;
+    const roundedMinutes = minutes === 60 ? 0 : minutes;
+    const roundedHours =
+      minutes === 60 ? now.getHours() + 1 : now.getHours();
+    return {
+      month: String(now.getMonth() + 1).padStart(2, '0'),
+      day: String(now.getDate()).padStart(2, '0'),
+      hour: String(roundedHours >= 24 ? 23 : roundedHours).padStart(2, '0'),
+      minute: String(roundedMinutes).padStart(2, '0'),
+    };
+  };
+  const currentDateTime = getCurrentDateTime();
+  const [selectedMonth, setSelectedMonth] = useState(currentDateTime.month);
+  const [selectedDay, setSelectedDay] = useState(currentDateTime.day);
+  const [selectedTime, setSelectedTime] = useState(
+    `${currentDateTime.hour}:${currentDateTime.minute}`
+  );
   const [showMonthPicker, setShowMonthPicker] = useState(false);
   const [showDayPicker, setShowDayPicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
@@ -235,9 +253,9 @@ export default function CreateTaskScreen() {
     try {
       setIsCreating(true);
 
-      // 날짜/시간을 ISO 8601 형식으로 변환
+      // 날짜/시간을 ISO 8601 형식으로 변환 (현재 연도 사용)
       const dueDate = new Date();
-      dueDate.setFullYear(2025);
+      dueDate.setFullYear(new Date().getFullYear());
       dueDate.setMonth(parseInt(selectedMonth) - 1);
       dueDate.setDate(parseInt(selectedDay));
       dueDate.setHours(parseInt(selectedTime.split(':')[0]));
@@ -314,10 +332,12 @@ export default function CreateTaskScreen() {
   const dayOptions = Array.from({ length: 31 }, (_, i) =>
     String(i + 1).padStart(2, '0')
   );
-  const timeOptions = Array.from(
-    { length: 24 },
-    (_, i) => String(i).padStart(2, '0') + ':00'
-  );
+  // 시간 선택 옵션: 00:00부터 23:30까지 30분 단위
+  const timeOptions = Array.from({ length: 24 * 2 }, (_, i) => {
+    const hours = Math.floor(i / 2);
+    const minutes = (i % 2) * 30;
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+  });
 
   return (
     <View style={styles.container}>
@@ -370,7 +390,7 @@ export default function CreateTaskScreen() {
             <Text style={styles.sectionTitle}>제한시간 설정</Text>
             <View style={styles.timeContainer}>
               <View style={styles.timeRow}>
-                <Text style={styles.yearText}>2025</Text>
+                <Text style={styles.yearText}>{new Date().getFullYear()}</Text>
                 <View style={styles.timeSelector}>
                   <TouchableOpacity
                     style={styles.timeButton}

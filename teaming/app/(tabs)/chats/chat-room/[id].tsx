@@ -55,6 +55,7 @@ interface Message {
   isMe: boolean;
   readCount?: number; // 선택적 속성으로 변경 (나중에 사용 예정)
   attachments?: any[]; // 파일 첨부 정보
+  createdAt?: string; // 날짜 구분선을 위한 생성 시간
 }
 
 interface ChatRoomData {
@@ -323,7 +324,7 @@ export default function ChatRoomScreen() {
           // 메시지 히스토리 로드 (웹소켓 연결과 병렬로 실행)
           loadMessageHistory();
 
-          // 웹소켓 연결 상태 확인
+          // 웹소켓 연결 상태 확인 및 연결 시도
           setConnectionStatus('connecting');
           console.log('🔍 웹소켓 연결 상태 확인 중...');
 
@@ -332,13 +333,38 @@ export default function ChatRoomScreen() {
             setConnectionStatus('connected');
             console.log('✅ 채팅방 진입 - 웹소켓 연결 확인 완료');
           } else {
-            console.log('⚠️ 웹소켓 연결되지 않음 - 구독 시도');
-            setIsConnected(false);
-            setConnectionStatus('disconnected');
+            console.log('⚠️ 웹소켓 연결되지 않음 - 연결 시도');
+            try {
+              // 웹소켓 연결 시도
+              await connectSock(token);
+              const connected = await waitForConnection(5000);
+              if (connected) {
+                setIsConnected(true);
+                setConnectionStatus('connected');
+                console.log('✅ 채팅방 진입 - 웹소켓 연결 성공');
+              } else {
+                setIsConnected(false);
+                setConnectionStatus('disconnected');
+                console.warn(
+                  '⚠️ 웹소켓 연결 타임아웃 - 채팅 기능 제한될 수 있음'
+                );
+              }
+            } catch (error) {
+              console.error('❌ 웹소켓 연결 실패:', error);
+              setIsConnected(false);
+              setConnectionStatus('disconnected');
+              // 에러가 발생해도 채팅방은 진입 가능하도록 (히스토리는 볼 수 있음)
+            }
           }
 
-          // 메시지 구독 및 읽음 경계 구독
+          // 메시지 구독 및 읽음 경계 구독 (웹소켓 연결 상태 확인 후)
           setTimeout(() => {
+            // 웹소켓 연결 상태 확인
+            if (!isWebSocketConnected()) {
+              console.warn('⚠️ 웹소켓 연결되지 않음 - 구독하지 않음');
+              return;
+            }
+
             console.log('🔔 채팅방 구독 시작 - 방 ID:', Number(id));
 
             // 메시지 구독
@@ -467,6 +493,7 @@ export default function ChatRoomScreen() {
             minute: '2-digit',
             hour12: true,
           }),
+      createdAt: msg.createdAt || new Date().toISOString(),
       isMe, // 현재 사용자 ID와 비교
       attachments: formattedAttachments, // 파일 첨부 정보 추가
       // readCount: 1, // TODO: 실제 읽음 수 구현 - 주석 처리 (나중에 사용 예정)
@@ -857,10 +884,52 @@ export default function ChatRoomScreen() {
     }
   };
 
+  // 날짜 포맷팅 함수 - 항상 전체 날짜 형식만 사용
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    const weekdays = [
+      '일요일',
+      '월요일',
+      '화요일',
+      '수요일',
+      '목요일',
+      '금요일',
+      '토요일',
+    ];
+    const weekday = weekdays[date.getDay()];
+    return `${date.getFullYear()}년 ${
+      date.getMonth() + 1
+    }월 ${date.getDate()}일 ${weekday}`;
+  };
+
+  // 같은 날짜인지 확인하는 함수
+  const isSameDate = (dateString1: string, dateString2: string) => {
+    const date1 = new Date(dateString1);
+    const date2 = new Date(dateString2);
+    return (
+      date1.getDate() === date2.getDate() &&
+      date1.getMonth() === date2.getMonth() &&
+      date1.getFullYear() === date2.getFullYear()
+    );
+  };
+
   const renderMessage = (message: Message, index: number) => {
-    const prevMessage = index > 0 ? displayMessages[index - 1] : null;
+    // FlatList에 reverse된 배열이 전달되므로, 원본 displayMessages에서 찾아야 함
+    // reverse된 배열의 index는: reverseIndex = displayMessages.length - 1 - index
+    // 실제 이전 메시지는 원본 배열에서: reverseIndex - 1
+    const reverseIndex = displayMessages.length - 1 - index;
+    const prevMessage =
+      reverseIndex > 0 ? displayMessages[reverseIndex - 1] : null;
+
+    // 날짜가 바뀌는지 확인 (실제 시간 순서대로: 이전 메시지가 더 오래된 메시지)
+    const showDateSeparator =
+      !prevMessage ||
+      !prevMessage.createdAt ||
+      !message.createdAt ||
+      !isSameDate(prevMessage.createdAt, message.createdAt);
 
     // 카카오톡과 동일한 로직: 같은 사람 + 같은 시간대 = 연속 메시지
+    // prevMessage는 원본 배열에서 찾은 실제 이전 메시지
     const isSameUser = prevMessage
       ? prevMessage.user === message.user && prevMessage.isMe === message.isMe
       : false;
@@ -876,6 +945,15 @@ export default function ChatRoomScreen() {
 
     return (
       <View key={message.id} style={styles.messageContainer}>
+        {/* 날짜 구분선 */}
+        {showDateSeparator && message.createdAt && (
+          <View style={styles.dateSeparator}>
+            <Ionicons name="calendar-outline" size={16} color="#666666" />
+            <Text style={styles.dateSeparatorText}>
+              {formatDate(message.createdAt)}
+            </Text>
+          </View>
+        )}
         {showUserInfo && (
           <View style={styles.userInfo}>
             <Image source={message.userImage} style={styles.userAvatar} />
@@ -1355,6 +1433,18 @@ const styles = StyleSheet.create({
   progressText: {
     fontSize: 14,
     color: '#CCCCCC',
+    fontWeight: '500',
+  },
+  dateSeparator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: 16,
+    gap: 6,
+  },
+  dateSeparatorText: {
+    fontSize: 13,
+    color: '#666666',
     fontWeight: '500',
   },
 });

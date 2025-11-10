@@ -228,13 +228,31 @@ export default function ChatsScreen() {
       if (jwt && sortedRooms.length > 0) {
         console.log('🚀 채팅방 목록 로드 완료 - 웹소켓 연결 시작');
         await safeConnectWebSocket();
-        console.log('✅ 웹소켓 연결 완료 - 구독 시작 가능');
+
+        // 웹소켓 연결 완료 대기 (최대 5초)
+        const maxWaitTime = 5000;
+        const startTime = Date.now();
+        while (
+          !isWebSocketConnected() &&
+          Date.now() - startTime < maxWaitTime
+        ) {
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+
+        if (isWebSocketConnected()) {
+          setIsConnected(true);
+          console.log('✅ 웹소켓 연결 완료 - 구독 시작 가능');
+        } else {
+          console.warn('⚠️ 웹소켓 연결 타임아웃 - 연결 상태 확인 필요');
+          setIsConnected(false);
+        }
       }
     } catch (err) {
       console.error('❌ 채팅방 목록 로드 실패:', err);
       setError('채팅방 목록을 불러오는데 실패했습니다.');
       Alert.alert('오류', '채팅방 목록을 불러오는데 실패했습니다.');
     } finally {
+      // 채팅방 목록이 로드되고 웹소켓 연결이 완료되면 로딩 종료
       setIsLoading(false);
     }
   };
@@ -255,7 +273,7 @@ export default function ChatsScreen() {
       console.log('✅ 채팅방 목록용 웹소켓 연결 성공 - isConnected: true');
     } catch (error) {
       // 에러 로그 제거 - 조용한 재시도
-      console.log('🔄 웹소켓 연결 중 - 백그라운드에서 재시도 중...');
+      console.log('🔄 채팅방 연결 중 - 백그라운드에서 재시도 중...');
       setIsConnected(false);
     }
   };
@@ -452,10 +470,12 @@ export default function ChatsScreen() {
 
       {/* 채팅방 목록 */}
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {isLoading ? (
+        {isLoading || (chatRooms.length > 0 && !isConnected && jwt) ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#4A90E2" />
-            <Text style={styles.loadingText}>채팅방 목록을 불러오는 중...</Text>
+            <Text style={styles.loadingText}>
+              {isLoading ? '채팅방 목록을 불러오는 중...' : '채팅방 연결 중...'}
+            </Text>
           </View>
         ) : error ? (
           <View style={styles.errorContainer}>
