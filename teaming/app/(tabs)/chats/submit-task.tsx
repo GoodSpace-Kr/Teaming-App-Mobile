@@ -114,10 +114,21 @@ export default function SubmitTaskScreen() {
       setIsLoading(true);
       console.log('🚀 과제 정보 로드:', { taskId, roomId });
 
+      // ID 유효성 검증
+      const roomIdNumber = Number(roomId);
+      const taskIdNumber = Number(taskId);
+
+      if (isNaN(roomIdNumber) || isNaN(taskIdNumber)) {
+        console.error('❌ 유효하지 않은 ID:', { roomId, taskId });
+        Alert.alert('오류', '유효하지 않은 과제 또는 채팅방 ID입니다.');
+        router.back();
+        return;
+      }
+
       // 과제 목록을 가져와서 해당 과제 찾기
-      const tasks = await TaskService.getTasks(Number(roomId));
+      const tasks = await TaskService.getTasks(roomIdNumber);
       const targetTask = tasks.find(
-        (task) => task.assignmentId === Number(taskId)
+        (task) => task.assignmentId === taskIdNumber
       );
 
       if (targetTask) {
@@ -197,7 +208,15 @@ export default function SubmitTaskScreen() {
             // TODO: 파일 업로드 API 호출 후 fileIds 받기
             const fileIds: number[] = []; // 실제로는 업로드된 파일의 ID들
 
-            await TaskService.submitTask(Number(roomId), {
+            // roomId 유효성 재검증
+            const roomIdNumber = Number(roomId);
+            if (isNaN(roomIdNumber)) {
+              console.error('❌ 유효하지 않은 roomId:', roomId);
+              Alert.alert('오류', '유효하지 않은 채팅방 ID입니다.');
+              return;
+            }
+
+            await TaskService.submitTask(roomIdNumber, {
               taskId: taskInfo.assignmentId,
               content: submissionText,
               fileIds: fileIds,

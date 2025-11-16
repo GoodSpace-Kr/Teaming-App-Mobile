@@ -499,7 +499,7 @@ export default function ChatsScreen() {
             </Text>
           </View>
         ) : (
-          chatRooms.map((room) => {
+          (Array.isArray(chatRooms) ? chatRooms : []).map((room) => {
             console.log(`🏠 채팅방 ${room.roomId}:`, {
               title: room.title,
               avatarUrl: room.avatarUrl,

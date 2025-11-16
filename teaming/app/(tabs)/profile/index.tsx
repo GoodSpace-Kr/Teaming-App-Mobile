@@ -9,6 +9,7 @@ import {
   Dimensions,
   Alert,
   ActivityIndicator,
+  // Switch, // TODO: 모드변경 기능 구현 시 주석 해제
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { router, useFocusEffect } from 'expo-router';
@@ -26,6 +27,8 @@ export default function MyPageScreen() {
   const [isLoadingUserInfo, setIsLoadingUserInfo] = useState(true);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [isLoadingAvatar, setIsLoadingAvatar] = useState(false);
+  // TODO: 모드변경 기능 구현 시 주석 해제
+  // const [isDarkMode, setIsDarkMode] = useState(true); // 기본값은 다크모드
 
   // 아바타 URL 가져오기
   const fetchAvatarUrl = async () => {
@@ -81,6 +84,13 @@ export default function MyPageScreen() {
   const handleVersionInfo = () => {
     console.log('버전정보');
   };
+
+  // TODO: 모드변경 기능 구현 시 주석 해제
+  // const handleModeToggle = (value: boolean) => {
+  //   setIsDarkMode(value);
+  //   console.log('모드 변경:', value ? '다크모드' : '라이트모드');
+  //   // TODO: 실제 모드 변경 로직 구현
+  // };
 
   const handleChangeAccountInfo = () => {
     if (userInfo) {
@@ -255,6 +265,27 @@ export default function MyPageScreen() {
             <Text style={styles.menuText}>개인정보 수집 및 이용</Text>
             <Ionicons name="chevron-forward" size={16} color="#666666" />
           </TouchableOpacity>
+
+          {/* TODO: 모드변경 기능 구현 시 주석 해제 */}
+          {/* <View style={styles.menuItem}>
+            <Ionicons
+              name="color-palette"
+              size={20}
+              color="#FFFFFF"
+              style={styles.menuIcon}
+            />
+            <Text style={styles.menuText}>모드변경</Text>
+            <View style={styles.switchContainer}>
+              <Switch
+                value={isDarkMode}
+                onValueChange={handleModeToggle}
+                trackColor={{ false: '#767577', true: '#007AFF' }}
+                thumbColor={isDarkMode ? '#FFFFFF' : '#f4f3f4'}
+                ios_backgroundColor="#3e3e3e"
+                style={styles.switch}
+              />
+            </View>
+          </View> */}
 
           <TouchableOpacity
             style={[styles.menuItem, styles.lastMenuItem]}
@@ -494,6 +525,15 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     textAlign: 'right',
   },
+  // TODO: 모드변경 기능 구현 시 주석 해제
+  // switchContainer: {
+  //   alignItems: 'center',
+  //   justifyContent: 'center',
+  //   height: 20, // 다른 아이콘들의 높이와 맞추기
+  // },
+  // switch: {
+  //   transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }],
+  // },
   dangerText: {
     color: '#FF6B6B',
   },

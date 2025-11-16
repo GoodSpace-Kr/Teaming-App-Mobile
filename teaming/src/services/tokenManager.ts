@@ -104,8 +104,32 @@ export const refreshAccessToken = async (): Promise<boolean> => {
     }
 
     return false;
-  } catch (error) {
-    console.error('❌ 토큰 갱신 실패:', error);
+  } catch (error: any) {
+    // 503 에러나 일시적인 서버 오류는 조용히 처리 (앱이 튕기지 않도록)
+    if (error?.response?.status === 503 || error?.response?.status >= 500) {
+      console.log('⚠️ 서버 일시적 오류 (503/5xx), 잠시 후 자동 재시도됩니다');
+      return false;
+    }
+    
+    // 네트워크 오류도 조용히 처리
+    if (error?.code === 'NETWORK_ERROR' || error?.message?.includes('Network')) {
+      console.log('⚠️ 네트워크 오류, 잠시 후 자동 재시도됩니다');
+      return false;
+    }
+
+    // 401, 403 등 인증 오류는 조용히 로그만 출력
+    if (error?.response?.status === 401 || error?.response?.status === 403) {
+      console.log('⚠️ 인증 오류, 토큰 갱신 실패 (조용히 처리)');
+      return false;
+    }
+
+    // 기타 에러는 개발 환경에서만 상세 로그 출력
+    if (__DEV__) {
+      console.error('❌ 토큰 갱신 실패:', error);
+    } else {
+      console.log('⚠️ 토큰 갱신 실패 (조용히 처리)');
+    }
+    
     return false;
   }
 };

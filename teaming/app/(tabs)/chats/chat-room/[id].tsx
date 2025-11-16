@@ -174,7 +174,26 @@ export default function ChatRoomScreen() {
 
     try {
       console.log('🚀 메시지 히스토리 로드 시작 - roomId:', id);
-      const historyResponse = await getMessageHistory(Number(id));
+      const roomIdNumber = Number(id);
+
+      // NaN 체크
+      if (isNaN(roomIdNumber)) {
+        console.warn('⚠️ 유효하지 않은 roomId:', id);
+        setMessages([]);
+        return;
+      }
+
+      const historyResponse = await getMessageHistory(roomIdNumber);
+
+      // items 배열이 없거나 유효하지 않은 경우 빈 배열로 처리
+      if (!historyResponse || !Array.isArray(historyResponse.items)) {
+        console.warn(
+          '⚠️ 메시지 히스토리 응답이 유효하지 않음:',
+          historyResponse
+        );
+        setMessages([]);
+        return;
+      }
 
       // API 응답을 STOMP 메시지 형식으로 변환
       const historyMessages: ChatMessage[] = historyResponse.items.map(
@@ -319,7 +338,12 @@ export default function ChatRoomScreen() {
 
         if (token) {
           // 채팅방 읽음 처리 (unreadCount를 0으로 리셋)
-          markRoomAsRead(Number(id));
+          const roomIdNumber = Number(id);
+          if (!isNaN(roomIdNumber)) {
+            markRoomAsRead(roomIdNumber);
+          } else {
+            console.warn('⚠️ 유효하지 않은 roomId로 읽음 처리 스킵:', id);
+          }
 
           // 메시지 히스토리 로드 (웹소켓 연결과 병렬로 실행)
           loadMessageHistory();
@@ -457,7 +481,10 @@ export default function ChatRoomScreen() {
   console.log('🔄 현재 메시지 개수:', messages.length);
   console.log('🔄 현재 메시지들:', messages);
   console.log('👤 현재 사용자 ID:', currentUserId);
-  const displayMessages = messages.map((msg: ChatMessage) => {
+
+  // messages 배열 안전성 체크
+  const safeMessages = Array.isArray(messages) ? messages : [];
+  const displayMessages = safeMessages.map((msg: ChatMessage) => {
     console.log('📨 메시지 변환:', {
       messageId: msg.messageId,
       type: msg.type,
@@ -622,7 +649,13 @@ export default function ChatRoomScreen() {
       // 연결 상태와 관계없이 메시지 전송 시도
       console.log('📤 메시지 전송 시작:', inputText.trim());
       try {
-        sendTextSock(Number(id), inputText.trim());
+        const roomIdNumber = Number(id);
+        if (isNaN(roomIdNumber)) {
+          console.error('❌ 유효하지 않은 roomId:', id);
+          Alert.alert('오류', '유효하지 않은 채팅방 ID입니다.');
+          return;
+        }
+        sendTextSock(roomIdNumber, inputText.trim());
         console.log('📤 메시지 전송 완료');
         setInputText('');
 
@@ -797,11 +830,26 @@ export default function ChatRoomScreen() {
       const intentData = await intentResponse.json();
       console.log('Intent 성공:', intentData);
 
+      // intentData 유효성 검증
+      if (!intentData || !intentData.url || !intentData.key) {
+        console.error('❌ Intent 응답이 유효하지 않음:', intentData);
+        Alert.alert(
+          '업로드 실패',
+          '파일 업로드 준비 응답이 유효하지 않습니다.'
+        );
+        return;
+      }
+
       // 2. S3에 파일 업로드
       console.log('=== S3 업로드 시작 ===');
 
       // 파일을 Blob으로 변환 (프론트엔드와 동일한 방식)
       const response = await fetch(fileUri);
+      if (!response.ok) {
+        console.error('❌ 파일 읽기 실패:', response.status);
+        Alert.alert('업로드 실패', '파일을 읽을 수 없습니다.');
+        return;
+      }
       const blob = await response.blob();
 
       const s3UploadResponse = await fetch(intentData.url, {
@@ -851,14 +899,32 @@ export default function ChatRoomScreen() {
       const completeData = await completeResponse.json();
       console.log('파일 업로드 완료:', completeData);
 
+      // completeData 유효성 검증
+      if (!completeData || !completeData.fileId) {
+        console.error('❌ Complete 응답이 유효하지 않음:', completeData);
+        Alert.alert(
+          '업로드 실패',
+          '파일 업로드 완료 응답이 유효하지 않습니다.'
+        );
+        return;
+      }
+
+      // roomId 유효성 검증
+      const roomIdNumber = Number(id);
+      if (isNaN(roomIdNumber)) {
+        console.error('❌ 유효하지 않은 roomId:', id);
+        Alert.alert('업로드 실패', '유효하지 않은 채팅방 ID입니다.');
+        return;
+      }
+
       // 4. 파일 타입에 따라 WebSocket 메시지 타입 결정
       const messageType = fileType === 'image' ? 'IMAGE' : 'FILE';
 
       // 5. WebSocket으로 파일 메시지 전송 (fileId 배열로 전달)
       if (messageType === 'IMAGE') {
-        sendImageSock(Number(id), fileName, [completeData.fileId], fileSize);
+        sendImageSock(roomIdNumber, fileName, [completeData.fileId], fileSize);
       } else {
-        sendFileSock(Number(id), fileName, [completeData.fileId], fileSize);
+        sendFileSock(roomIdNumber, fileName, [completeData.fileId], fileSize);
       }
 
       Alert.alert(
