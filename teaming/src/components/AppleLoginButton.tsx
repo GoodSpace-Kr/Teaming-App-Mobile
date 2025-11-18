@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import apiClient from '../services/api';
+import { registerPushToken } from '../services/pushNotificationService';
 
 interface Props {
   onLoginSuccess: (result: any) => void;
@@ -75,6 +76,9 @@ export default function AppleLoginButton({
           loginType: 'apple',
           user: response.data.user,
         });
+
+        // Push Token 등록
+        await registerPushToken();
 
         onLoginSuccess(response.data);
       } else {

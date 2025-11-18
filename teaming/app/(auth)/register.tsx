@@ -584,7 +584,11 @@ export default function RegisterScreen() {
       </Text>
       <TouchableOpacity
         style={styles.startButton}
-        onPress={() => router.replace('/(tabs)')}
+        onPress={() => {
+          console.log('시작하기 버튼 눌림');
+          Alert.alert('시작하기 버튼 눌림');
+          router.replace('/(tabs)');
+        }}
       >
         <Text style={styles.startButtonText}>시작하기</Text>
       </TouchableOpacity>
@@ -614,7 +618,10 @@ export default function RegisterScreen() {
     <View style={styles.container}>
       <StatusBar style="light" />
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+      >
         {/* 헤더 */}
         <View style={styles.headerSection}>
           {currentStep === 1 ? (
@@ -639,7 +646,11 @@ export default function RegisterScreen() {
           <View style={styles.navigationContainer}>
             <TouchableOpacity
               style={styles.previousButton}
-              onPress={handlePrevious}
+              onPress={() => {
+                console.log('이전 버튼 눌림');
+                Alert.alert('이전 버튼 눌림');
+                handlePrevious();
+              }}
               disabled={currentStep === 1}
             >
               <Text
@@ -660,7 +671,11 @@ export default function RegisterScreen() {
                     canProceed() && !isSigningUp ? '#39359F' : '#333333',
                 },
               ]}
-              onPress={handleNext}
+              onPress={() => {
+                console.log('다음 버튼 눌림');
+                Alert.alert('다음 버튼 눌림');
+                handleNext();
+              }}
               disabled={!canProceed() || isSigningUp}
             >
               {isSigningUp ? (

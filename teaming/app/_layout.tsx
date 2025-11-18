@@ -1,3 +1,9 @@
+// app/_layout.tsx
+
+import 'react-native-gesture-handler'; // ✅ 제일 위쪽
+
+import 'react-native-reanimated';
+
 import {
   DarkTheme,
   DefaultTheme,
@@ -6,7 +12,7 @@ import {
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import 'react-native-reanimated';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { ThemeProvider, useTheme } from '@/src/providers/ThemeProvider';
 
@@ -28,7 +34,6 @@ function RootLayoutContent() {
       <Stack
         screenOptions={{
           animation: 'fade',
-          animationDuration: 200,
         }}
       >
         <Stack.Screen name="(splash)" options={{ headerShown: false }} />
@@ -43,9 +48,11 @@ function RootLayoutContent() {
 
 export default function RootLayout() {
   return (
-    <ThemeProvider>
-      <RootLayoutContent />
-    </ThemeProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <ThemeProvider>
+        <RootLayoutContent />
+      </ThemeProvider>
+    </GestureHandlerRootView>
   );
 }
 

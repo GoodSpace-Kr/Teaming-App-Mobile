@@ -5,6 +5,7 @@ import {
   refreshAccessToken,
   clearTokens,
 } from './tokenManager';
+import { unregisterPushToken } from './pushNotificationService';
 
 // API 기본 설정
 const API_BASE_URL = 'https://teamingkr.duckdns.org/api';
@@ -163,6 +164,12 @@ apiClient.interceptors.response.use(
             console.log('⚠️ 토큰 갱신 중 오류 발생');
           }
           // 503이 아닌 심각한 에러만 로그아웃 처리
+          // Push Token 삭제 (JWT 없어도 요청 가능)
+          try {
+            await unregisterPushToken();
+          } catch (error) {
+            console.log('⚠️ Push Token 삭제 실패 (무시):', error);
+          }
           await clearTokens();
         } else {
           console.log('⚠️ 토큰 갱신 일시적 오류 (503), 조용히 처리');

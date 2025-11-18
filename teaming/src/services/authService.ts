@@ -1,6 +1,7 @@
 // authService.ts
 import { clearTokens, isLoggedIn, getCurrentUser } from './tokenManager';
 import apiClient from './api';
+import { unregisterPushToken } from './pushNotificationService';
 
 /**
  * 로그아웃
@@ -8,6 +9,14 @@ import apiClient from './api';
 export const logout = async (): Promise<boolean> => {
   try {
     console.log('🚪 로그아웃 시작...');
+
+    // Push Token 삭제
+    try {
+      await unregisterPushToken();
+      console.log('✅ Push Token 삭제 완료');
+    } catch (error) {
+      console.log('⚠️ Push Token 삭제 실패 (무시):', error);
+    }
 
     // 서버에 로그아웃 요청 (선택사항)
     try {

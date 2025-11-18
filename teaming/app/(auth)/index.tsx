@@ -17,21 +17,31 @@ import { useLandingStats } from '../../src/hooks/useLandingStats';
 const { width, height } = Dimensions.get('window');
 
 export default function LoginScreen() {
-  const { stats, loading, error } = useLandingStats();
+  const { stats, loading } = useLandingStats();
   const insets = useSafeAreaInsets();
 
   const handleLoginPress = () => {
+    console.log('로그인 버튼 눌림');
     router.push('/(auth)/login');
+  };
+
+  const handleRegisterPress = () => {
+    console.log('회원가입 버튼 눌림');
+    router.push('/(auth)/register');
   };
 
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
 
-      <ScrollView
-        contentContainerStyle={[
-          styles.scrollContent,
-          { paddingTop: insets.top + 20 },
+      {/* 메인 고정 영역 */}
+      <View
+        style={[
+          styles.content,
+          {
+            paddingTop: insets.top - 30,
+            paddingBottom: insets.bottom + 20,
+          },
         ]}
       >
         {/* 상단 로고 섹션 */}
@@ -53,7 +63,7 @@ export default function LoginScreen() {
         </View>
 
         {/* 배경 웨이브 이미지 */}
-        <View style={styles.waveContainer}>
+        <View style={styles.waveContainer} pointerEvents="none">
           <Image
             source={require('../../assets/images/(beforeLogin)/wave.png')}
             style={styles.waveImage}
@@ -121,7 +131,7 @@ export default function LoginScreen() {
           </View>
         </View>
 
-        {/* 사용자 후기 섹션 */}
+        {/* 후기 섹션 */}
         <View style={styles.reviewsSection}>
           <Text style={styles.reviewsTitle}>함께한 사람들의 목소리</Text>
 
@@ -130,6 +140,7 @@ export default function LoginScreen() {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.reviewsScrollContainer}
           >
+            {/* ... 기존 리뷰 카드들 그대로 ... */}
             <View style={styles.reviewCard}>
               <View style={styles.reviewHeader}>
                 <Text style={styles.reviewIcon}>😊</Text>
@@ -164,23 +175,25 @@ export default function LoginScreen() {
           </ScrollView>
         </View>
 
-        {/* 로그인/회원가입 버튼 */}
+        {/* 👇 로그인/회원가입 섹션 – 이제 ScrollView 안의 마지막 요소 */}
         <View style={styles.loginButtonSection}>
           <TouchableOpacity
             style={styles.loginButton}
-            onPress={() => router.push('/(auth)/login')}
+            onPress={handleLoginPress}
           >
             <Text style={styles.loginButtonText}>로그인</Text>
           </TouchableOpacity>
+
           <Text style={styles.divider}>/</Text>
+
           <TouchableOpacity
             style={styles.registerButton}
-            onPress={() => router.push('/(auth)/register')}
+            onPress={handleRegisterPress}
           >
             <Text style={styles.registerButtonText}>회원가입</Text>
           </TouchableOpacity>
         </View>
-      </ScrollView>
+      </View>
     </View>
   );
 }
@@ -190,10 +203,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000000',
   },
-  scrollContent: {
-    flexGrow: 1,
+  content: {
+    flex: 1,
     paddingHorizontal: 20,
-    paddingBottom: 40,
   },
 
   // 로고 섹션
@@ -262,14 +274,15 @@ const styles = StyleSheet.create({
   // 통계 섹션
   statsSection: {
     flexDirection: 'row',
-    marginBottom: 50,
+    marginBottom: 30,
     marginTop: 20,
     zIndex: 1,
     paddingHorizontal: 1,
     justifyContent: 'space-between',
   },
   statCard: {
-    width: '32.5%',
+    width: '32.2%',
+    height: '100%',
     backgroundColor: 'rgba(255, 255, 255, 0.08)',
     borderRadius: 16,
     padding: 20,
@@ -277,7 +290,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.1)',
-    minHeight: 150,
   },
   statIcon: {
     marginBottom: 16,
@@ -304,7 +316,7 @@ const styles = StyleSheet.create({
 
   // 후기 섹션
   reviewsSection: {
-    marginBottom: 50,
+    marginBottom: 30,
     zIndex: 2,
   },
   reviewsTitle: {
@@ -356,14 +368,13 @@ const styles = StyleSheet.create({
 
   // 로그인 버튼 섹션
   loginButtonSection: {
-    flexDirection: 'row',
-    justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 20,
-    zIndex: 2,
+    justifyContent: 'center',
+    flexDirection: 'row',
+    marginTop: 32,
   },
   loginButton: {
-    paddingHorizontal: 0,
+    paddingHorizontal: 8,
     paddingVertical: 8,
   },
   loginButtonText: {
@@ -379,7 +390,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 8,
   },
   registerButton: {
-    paddingHorizontal: 0,
+    paddingHorizontal: 8,
     paddingVertical: 8,
   },
   registerButtonText: {
