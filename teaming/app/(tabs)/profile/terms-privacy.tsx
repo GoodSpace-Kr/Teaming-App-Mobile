@@ -10,14 +10,19 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width } = Dimensions.get('window');
 
 type Tab = 'terms' | 'privacy';
 
 export default function TermsPrivacyScreen() {
+  const insets = useSafeAreaInsets();
   const { tab } = useLocalSearchParams<{ tab?: string }>();
   const [selectedTab, setSelectedTab] = useState<Tab>('terms');
+  
+  // 하단바 높이 계산 (탭바 높이: 50 + Math.max(insets.bottom, 20))
+  const tabBarHeight = 50 + Math.max(insets.bottom, 20);
 
   useEffect(() => {
     if (tab === 'privacy') {
@@ -66,7 +71,11 @@ export default function TermsPrivacyScreen() {
         {renderTabButton('privacy', '개인정보 처리방침')}
       </View>
       {/* 내용 */}
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.content}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: tabBarHeight + 20 }}
+      >
         {selectedTab === 'terms' ? <TermsOfUseView /> : <PrivacyPolicyView />}
       </ScrollView>
     </View>

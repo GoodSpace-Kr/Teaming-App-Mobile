@@ -13,11 +13,13 @@ import {
   Alert,
   ActivityIndicator,
   FlatList,
+  Keyboard,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StatusBar } from 'expo-status-bar';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import ChatBubble from '@/src/components/ChatBubble';
@@ -75,12 +77,38 @@ export default function ChatRoomScreen() {
     title?: string;
     ready?: string;
   }>();
+  const insets = useSafeAreaInsets();
   const [inputText, setInputText] = useState('');
   const [showFileMenu, setShowFileMenu] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+  // 하단바 높이 계산 (탭바 높이: 50 + Math.max(insets.bottom, 20))
+  const tabBarHeight = 40 + Math.max(insets.bottom, 20);
+
+  // 키보드 이벤트 리스너
+  useEffect(() => {
+    const keyboardWillShowListener = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      (e) => {
+        setKeyboardHeight(e.endCoordinates.height);
+      }
+    );
+    const keyboardWillHideListener = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => {
+        setKeyboardHeight(0);
+      }
+    );
+
+    return () => {
+      keyboardWillShowListener.remove();
+      keyboardWillHideListener.remove();
+    };
+  }, []);
 
   // 텍스트 입력창 높이 계산
   const getInputHeight = (text: string) => {
-    const baseHeight = 44; // 기본 높이
+    const baseHeight = 39; // 기본 높이
     const lineHeight = 22; // 한 줄 높이
     const maxLines = 4; // 최대 줄 수
 
@@ -1107,8 +1135,9 @@ export default function ChatRoomScreen() {
       {/* 메시지 목록 */}
       <KeyboardAvoidingView
         style={styles.chatContainer}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={0}
+        enabled={false}
       >
         <FlatList
           ref={listRef}
@@ -1128,7 +1157,13 @@ export default function ChatRoomScreen() {
 
         {/* 메시지 입력창 */}
         <View
-          style={styles.inputContainer}
+          style={[
+            styles.inputContainer,
+            {
+              paddingBottom:
+                keyboardHeight > 0 ? keyboardHeight + 8.5 : tabBarHeight + 12,
+            },
+          ]}
           onLayout={(e) => {
             const h = e.nativeEvent.layout.height;
             // 급격한 튐 방지용 클램프
@@ -1298,7 +1333,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 4,
-    marginLeft: -10,
+    marginLeft: 0,
   },
   userAvatar: {
     width: 30,
@@ -1315,7 +1350,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
     paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingVertical: 7,
     backgroundColor: '#121216',
     borderTopWidth: 1,
     borderTopColor: '#292929',
@@ -1328,7 +1363,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 8,
-    marginBottom: 7,
+    marginBottom: 4,
     borderWidth: 1,
     borderColor: '#292929',
   },
@@ -1340,9 +1375,8 @@ const styles = StyleSheet.create({
     borderColor: '#292929',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    fontSize: 16,
+    fontSize: 14,
     color: '#FFFFFF',
-    minHeight: 44, // 최소 높이 설정
     maxHeight: 132, // 최대 높이 설정 (3줄 정도)
     marginRight: 12,
   },
@@ -1350,7 +1384,7 @@ const styles = StyleSheet.create({
     width: 30,
     height: 30,
     borderRadius: 20,
-    marginBottom: 7,
+    marginBottom: 4,
     alignItems: 'center',
     justifyContent: 'center',
   },

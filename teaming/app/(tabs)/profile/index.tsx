@@ -14,6 +14,7 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { logout as authLogout } from '../../../src/services/authService';
 import { getUserInfo, UserInfo, withdraw } from '../../../src/services/api';
 import { clearTokens } from '../../../src/services/tokenManager';
@@ -22,6 +23,7 @@ import apiClient from '../../../src/services/api';
 const { width } = Dimensions.get('window');
 
 export default function MyPageScreen() {
+  const insets = useSafeAreaInsets();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
   const [isLoadingUserInfo, setIsLoadingUserInfo] = useState(true);
@@ -29,6 +31,9 @@ export default function MyPageScreen() {
   const [isLoadingAvatar, setIsLoadingAvatar] = useState(false);
   // TODO: 모드변경 기능 구현 시 주석 해제
   // const [isDarkMode, setIsDarkMode] = useState(true); // 기본값은 다크모드
+  
+  // 하단바 높이 계산 (탭바 높이: 50 + Math.max(insets.bottom, 20))
+  const tabBarHeight = 50 + Math.max(insets.bottom, 20);
 
   // 아바타 URL 가져오기
   const fetchAvatarUrl = async () => {
@@ -191,6 +196,7 @@ export default function MyPageScreen() {
       <ScrollView
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: tabBarHeight + 20 }}
       >
         {/* 프로필 섹션 */}
         <View style={styles.profileSection}>

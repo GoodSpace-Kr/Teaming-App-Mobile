@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { FileService } from '@/src/services/fileService';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 
 interface FileAttachment {
@@ -93,7 +93,7 @@ export default function FileChatBubble({
     if (nameWithoutExt.length <= 22) return fileName;
 
     // 확장자를 제외한 이름을 22글자로 자르고 ... + 확장자
-    return nameWithoutExt.substring(0, 22) + '...' + extension;
+    return nameWithoutExt.substring(0, 22) + '..' + extension;
   };
   const formatFileSizeLocal = (size?: number) => {
     // 0도 유효하게 표시
@@ -112,7 +112,7 @@ export default function FileChatBubble({
     borderRadius: 16,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    maxWidth: '78%',
+    maxWidth: '80%',
     position: 'relative',
     borderWidth: 1,
     borderColor: '#292929',
