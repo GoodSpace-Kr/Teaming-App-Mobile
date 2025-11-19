@@ -10,58 +10,42 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "buildNumber": "35",
+      "buildNumber": "38",
       "supportsTablet": true,
       "bundleIdentifier": "com.teaming.app",
       "infoPlist": {
         "CFBundleURLTypes": [
           {
             "CFBundleURLName": "kakao",
-            "CFBundleURLSchemes": [
-              "kakaobab0d232a194e56bd4920ba68c04e3e6"
-            ]
+            "CFBundleURLSchemes": ["kakaobab0d232a194e56bd4920ba68c04e3e6"]
           },
           {
             "CFBundleURLName": "google",
-            "CFBundleURLSchemes": [
-              "com.teaming.app"
-            ]
+            "CFBundleURLSchemes": ["com.teaming.app"]
           },
           {
             "CFBundleURLName": "apple",
-            "CFBundleURLSchemes": [
-              "com.teaming.app"
-            ]
+            "CFBundleURLSchemes": ["com.teaming.app"]
           },
           {
             "CFBundleURLName": "payment",
-            "CFBundleURLSchemes": [
-              "teaming"
-            ]
+            "CFBundleURLSchemes": ["teaming"]
           },
           {
             "CFBundleURLName": "kakao",
-            "CFBundleURLSchemes": [
-              "kakaobab0d232a194e56bd4920ba68c04e3e6"
-            ]
+            "CFBundleURLSchemes": ["kakaobab0d232a194e56bd4920ba68c04e3e6"]
           },
           {
             "CFBundleURLName": "google",
-            "CFBundleURLSchemes": [
-              "com.teaming.app"
-            ]
+            "CFBundleURLSchemes": ["com.teaming.app"]
           },
           {
             "CFBundleURLName": "apple",
-            "CFBundleURLSchemes": [
-              "com.teaming.app"
-            ]
+            "CFBundleURLSchemes": ["com.teaming.app"]
           },
           {
             "CFBundleURLName": "payment",
-            "CFBundleURLSchemes": [
-              "teaming"
-            ]
+            "CFBundleURLSchemes": ["teaming"]
           }
         ],
         "KAKAO_APP_KEY": "bab0d232a194e56bd4920ba68c04e3e6",
@@ -83,10 +67,7 @@
               "scheme": "kakaobab0d232a194e56bd4920ba68c04e3e6"
             }
           ],
-          "category": [
-            "BROWSABLE",
-            "DEFAULT"
-          ]
+          "category": ["BROWSABLE", "DEFAULT"]
         },
         {
           "action": "VIEW",
@@ -95,10 +76,7 @@
               "scheme": "com.teaming.app"
             }
           ],
-          "category": [
-            "BROWSABLE",
-            "DEFAULT"
-          ]
+          "category": ["BROWSABLE", "DEFAULT"]
         },
         {
           "action": "VIEW",
@@ -107,15 +85,10 @@
               "scheme": "teaming"
             }
           ],
-          "category": [
-            "BROWSABLE",
-            "DEFAULT"
-          ]
+          "category": ["BROWSABLE", "DEFAULT"]
         }
       ],
-      "permissions": [
-        "RECEIVE_BOOT_COMPLETED"
-      ],
+      "permissions": ["RECEIVE_BOOT_COMPLETED"],
       "manifest": {
         "application": {
           "meta-data": [
