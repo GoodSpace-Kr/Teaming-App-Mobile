@@ -2,7 +2,12 @@ import { Stack } from 'expo-router';
 
 export default function HomeLayout() {
   return (
-    <Stack>
+    <Stack
+      screenOptions={{
+        gestureEnabled: true,
+        gestureDirection: 'horizontal',
+      }}
+    >
       <Stack.Screen
         name="index"
         options={{
