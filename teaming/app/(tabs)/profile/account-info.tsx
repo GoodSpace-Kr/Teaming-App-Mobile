@@ -40,7 +40,7 @@ export default function AccountInfoScreen() {
   const [email, setEmail] = useState('');
   const [nickname, setNickname] = useState('');
   const [profileImage, setProfileImage] = useState<string | any>(
-    require('../../../assets/images/(chattingRoom)/me.png')
+    require('../../../assets/images/teaminglogo.png')
   );
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [isLoadingAvatar, setIsLoadingAvatar] = useState(false);

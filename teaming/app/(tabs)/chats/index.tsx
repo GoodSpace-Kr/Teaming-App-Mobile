@@ -15,7 +15,6 @@ import { StatusBar } from 'expo-status-bar';
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { WebView } from 'react-native-webview';
-import { Linking } from 'react-native';
 import { getChatRooms, ChatRoom } from '../../../src/services/chatService';
 import { getAccessToken } from '../../../src/services/tokenManager';
 import {
@@ -30,6 +29,10 @@ import {
 import { createPayment } from '../../../src/services/api';
 
 const { width } = Dimensions.get('window');
+
+// 결제 완료 시그널 URL (백엔드 리다이렉트 URL)
+const PAYMENT_RESULT_URL =
+  'https://teamingkr.duckdns.org/api/payment/app-result';
 export default function ChatsScreen() {
   const [chatRooms, setChatRooms] = useState<ChatRoom[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -73,7 +76,6 @@ export default function ChatsScreen() {
   const [showPaymentSuccessModal, setShowPaymentSuccessModal] = useState(false);
   const [showPaymentFailureModal, setShowPaymentFailureModal] = useState(false);
   const [shouldRenderWebView, setShouldRenderWebView] = useState(true);
-  const [paymentTimer, setPaymentTimer] = useState<NodeJS.Timeout | null>(null);
 
   // JWT 토큰 가져오기
   useEffect(() => {
@@ -111,7 +113,6 @@ export default function ChatsScreen() {
       console.log('❌ 실제 웹소켓 연결 상태 미만족 - 구독하지 않음');
       return;
     }
-    // Tbtehfdl02
     // 로컬 상태도 업데이트
     if (!isConnected) {
       setIsConnected(true);
@@ -228,13 +229,31 @@ export default function ChatsScreen() {
       if (jwt && sortedRooms.length > 0) {
         console.log('🚀 채팅방 목록 로드 완료 - 웹소켓 연결 시작');
         await safeConnectWebSocket();
-        console.log('✅ 웹소켓 연결 완료 - 구독 시작 가능');
+
+        // 웹소켓 연결 완료 대기 (최대 5초)
+        const maxWaitTime = 5000;
+        const startTime = Date.now();
+        while (
+          !isWebSocketConnected() &&
+          Date.now() - startTime < maxWaitTime
+        ) {
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+
+        if (isWebSocketConnected()) {
+          setIsConnected(true);
+          console.log('✅ 웹소켓 연결 완료 - 구독 시작 가능');
+        } else {
+          console.warn('⚠️ 웹소켓 연결 타임아웃 - 연결 상태 확인 필요');
+          setIsConnected(false);
+        }
       }
     } catch (err) {
       console.error('❌ 채팅방 목록 로드 실패:', err);
       setError('채팅방 목록을 불러오는데 실패했습니다.');
       Alert.alert('오류', '채팅방 목록을 불러오는데 실패했습니다.');
     } finally {
+      // 채팅방 목록이 로드되고 웹소켓 연결이 완료되면 로딩 종료
       setIsLoading(false);
     }
   };
@@ -255,7 +274,7 @@ export default function ChatsScreen() {
       console.log('✅ 채팅방 목록용 웹소켓 연결 성공 - isConnected: true');
     } catch (error) {
       // 에러 로그 제거 - 조용한 재시도
-      console.log('🔄 웹소켓 연결 중 - 백그라운드에서 재시도 중...');
+      console.log('🔄 채팅방 연결 중 - 백그라운드에서 재시도 중...');
       setIsConnected(false);
     }
   };
@@ -273,6 +292,9 @@ export default function ChatsScreen() {
   useEffect(() => {
     fetchChatRooms();
   }, [retryKey]);
+
+  // HTTPS URL 방식으로 변경되어 Linking 리스너 불필요
+  // WebView의 onShouldStartLoadWithRequest에서만 처리
 
   // 컴포넌트 언마운트 시 웹소켓 연결 정리 (앱 종료 시에만)
   useEffect(() => {
@@ -315,51 +337,117 @@ export default function ChatsScreen() {
     }
   };
 
-  // 결제 모달 닫기
-  const handlePaymentModalClose = () => {
-    // 타이머 정리
-    if (paymentTimer) {
-      clearTimeout(paymentTimer);
-      setPaymentTimer(null);
+  // 결제 모달 닫기 (사용자가 직접 닫은 경우)
+  const handlePaymentModalClose = async () => {
+    // 현재 선택된 방 정보 저장
+    const currentRoomId = selectedRoom?.roomId;
+
+    // 웹뷰/모달 닫기
+    setShowPaymentModal(false);
+    setShouldRenderWebView(false);
+    setPaymentHtml('');
+
+    // 사용자가 직접 닫은 경우: 조용히 서버 상태 확인
+    if (currentRoomId) {
+      try {
+        console.log('🔍 사용자가 웹뷰를 닫음 - 서버 상태 조용히 확인 중...');
+
+        // 서버 상태 확인 (조용히)
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        await fetchChatRooms();
+
+        const rooms = await getChatRooms();
+        const updatedRoom = rooms.find((r) => r.roomId === currentRoomId);
+
+        if (updatedRoom?.paymentStatus === 'PAID') {
+          // 사실은 결제 성공인데 사용자가 먼저 꺼버린 케이스
+          console.log(
+            '✅ 결제 성공 확인 (사용자가 먼저 닫았지만 실제로는 성공)'
+          );
+          setShowPaymentSuccessModal(true);
+        } else {
+          // 진짜로 안 된 것 같으면: 아무 모달도 안 띄우고 끝
+          console.log('❌ 결제 안 된 것으로 간주 (모달 없이 종료)');
+        }
+      } catch (error) {
+        console.log('⚠️ 결제 상태 확인 실패, 일단 조용히 무시', error);
+        // 에러 발생 시에도 조용히 종료
+      }
     }
 
-    setShowPaymentModal(false);
-    setPaymentHtml('');
+    // 선택된 방 정보 초기화
     setSelectedRoom(null);
     setShouldRenderWebView(true); // WebView 렌더링 상태 초기화
   };
 
-  // 결제 성공 처리
+  // 결제 완료 처리 (HTTPS URL 시그널 → 서버 상태 확인 후 모달 결정)
+  // 성공/실패 모두 이 함수로 처리 (결제 취소 포함)
   const handlePaymentSuccess = async () => {
-    console.log('✅ 결제 성공 - 웹뷰 모달 즉시 닫기');
+    console.log(
+      '✅ 결제 완료 신호 감지 (HTTPS URL 시그널) - 서버 상태 확인 시작'
+    );
 
-    // 1. 먼저 웹뷰 모달을 즉시 닫기
-    setShowPaymentModal(false);
-    setPaymentHtml('');
-    setSelectedRoom(null);
+    // 현재 선택된 방 정보 저장
+    const currentRoomId = selectedRoom?.roomId;
 
-    // 2. 서버 상태 업데이트를 위해 잠시 대기
-    console.log('⏳ 서버 상태 업데이트 대기 중...');
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+    // 웹뷰 모달은 onShouldStartLoadWithRequest에서 이미 닫혔음
+    // 서버 상태 반영을 위해 잠시 대기
+    console.log('⏳ 서버 상태 확인 중...');
+    await new Promise((resolve) => setTimeout(resolve, 1000));
 
-    // 3. 채팅방 목록 새로고침
+    // 채팅방 목록 새로고침
     await fetchChatRooms();
 
-    // 4. 성공 모달 표시
-    setShowPaymentSuccessModal(true);
-  };
+    // 최신 상태에서 해당 방 찾기
+    const rooms = await getChatRooms();
+    const updatedRoom = rooms.find((r) => r.roomId === currentRoomId);
 
-  // 결제 실패 처리
-  const handlePaymentFailure = () => {
-    console.log('❌ 결제 실패 - 웹뷰 모달 즉시 닫기');
+    // 서버 상태에 따라 모달 결정
+    if (updatedRoom?.paymentStatus === 'PAID') {
+      // 결제 성공: 재시도 로직으로 확실히 확인
+      console.log('🎉 서버 기준 결제 성공 확인 (PAID) - 재시도로 확실히 확인');
+      let confirmedRoom: ChatRoom | undefined = updatedRoom;
+      let retryCount = 0;
+      const maxRetries = 3;
 
-    // 1. 먼저 웹뷰 모달을 즉시 닫기
-    setShowPaymentModal(false);
-    setPaymentHtml('');
+      // 이미 PAID이지만 확실히 하기 위해 재시도
+      while (retryCount < maxRetries && currentRoomId) {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        await fetchChatRooms();
+        const retryRooms = await getChatRooms();
+        confirmedRoom = retryRooms.find((r) => r.roomId === currentRoomId);
+
+        if (confirmedRoom?.paymentStatus === 'PAID') {
+          console.log('✅ 결제 성공 확실히 확인됨 - 성공 모달 표시');
+          setShowPaymentSuccessModal(true);
+          setSelectedRoom(null);
+          return;
+        }
+
+        retryCount++;
+        if (retryCount < maxRetries) {
+          console.log(
+            `⏳ 결제 성공 재확인 중 ${retryCount}/${maxRetries - 1}...`
+          );
+        }
+      }
+
+      // 재시도 후에도 PAID면 성공 모달
+      if (confirmedRoom?.paymentStatus === 'PAID') {
+        console.log('✅ 결제 성공 모달 표시');
+        setShowPaymentSuccessModal(true);
+      } else {
+        console.log('❌ 재시도 후 상태 변경됨 - 실패 모달 표시');
+        setShowPaymentFailureModal(true);
+      }
+    } else {
+      // 결제 실패/취소: 재시도 없이 바로 실패 모달 표시
+      console.log('❌ 서버 기준 결제 미완료 (NOT_PAID) - 실패 모달 즉시 표시');
+      setShowPaymentFailureModal(true);
+    }
+
+    // 선택된 방 정보 초기화
     setSelectedRoom(null);
-
-    // 2. 실패 모달 표시
-    setShowPaymentFailureModal(true);
   };
 
   // 결제 성공 모달 확인 버튼
@@ -452,10 +540,12 @@ export default function ChatsScreen() {
 
       {/* 채팅방 목록 */}
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {isLoading ? (
+        {isLoading || (chatRooms.length > 0 && !isConnected && jwt) ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#4A90E2" />
-            <Text style={styles.loadingText}>채팅방 목록을 불러오는 중...</Text>
+            <Text style={styles.loadingText}>
+              {isLoading ? '채팅방 목록을 불러오는 중...' : '채팅방 연결 중...'}
+            </Text>
           </View>
         ) : error ? (
           <View style={styles.errorContainer}>
@@ -479,7 +569,7 @@ export default function ChatsScreen() {
             </Text>
           </View>
         ) : (
-          chatRooms.map((room) => {
+          (Array.isArray(chatRooms) ? chatRooms : []).map((room) => {
             console.log(`🏠 채팅방 ${room.roomId}:`, {
               title: room.title,
               avatarUrl: room.avatarUrl,
@@ -629,29 +719,29 @@ export default function ChatsScreen() {
               }}
               onShouldStartLoadWithRequest={(request) => {
                 console.log('🌐 웹뷰 로드 요청:', request.url);
+                console.log('🌐 요청 타입:', request.navigationType);
 
-                // teaming:// URL 감지 시 즉시 차단하고 처리
-                if (request.url.startsWith('teaming://payment/')) {
-                  console.log('📱 결제 결과 Deep Link 감지:', request.url);
+                // 결제 완료 시그널 URL 감지 (백엔드 리다이렉트)
+                if (request.url.startsWith(PAYMENT_RESULT_URL)) {
+                  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+                  console.log('✅ [결제 플로우 종료] 시그널 URL 감지');
+                  console.log('📱 감지 URL:', request.url);
+                  console.log('📱 출처: 백엔드 리다이렉트 (302 응답)');
+                  console.log(
+                    '📱 감지 시점: WebView onShouldStartLoadWithRequest'
+                  );
+                  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
-                  // 타이머 정리 (Deep Link가 먼저 감지된 경우)
-                  if (paymentTimer) {
-                    clearTimeout(paymentTimer);
-                    setPaymentTimer(null);
-                    console.log('⏰ 기존 타이머 정리됨 (Deep Link 우선 처리)');
-                  }
-
-                  // WebView 렌더링 즉시 중단
+                  // 웹뷰 모달 즉시 닫기 (핸들러 호출 전에 먼저 닫기)
+                  setShowPaymentModal(false);
                   setShouldRenderWebView(false);
+                  setPaymentHtml('');
 
-                  if (request.url.includes('/success')) {
-                    console.log('✅ 결제 성공 감지 - 웹뷰 렌더링 중단');
-                    handlePaymentSuccess();
-                  } else if (request.url.includes('/fail')) {
-                    console.log('❌ 결제 실패 감지 - 웹뷰 렌더링 중단');
-                    handlePaymentFailure();
-                  }
-                  return false; // URL 로드 차단
+                  // 성공/실패 판정은 handlePaymentSuccess() 내부에서 서버 상태로 결정
+                  console.log('🔄 서버 상태 확인 시작 (성공/실패 판정)');
+                  handlePaymentSuccess();
+
+                  return false; // URL 로드 차단 (실제 페이지 로드 안 함)
                 }
 
                 return true; // 다른 URL은 정상 로드 허용
@@ -663,25 +753,27 @@ export default function ChatsScreen() {
                 // 결제 진행 상황 로그만 출력
                 if (navState.url.includes('/api/payment/request')) {
                   console.log('🔄 백엔드 결제 처리 중:', navState.url);
-
-                  // 기존 타이머가 있다면 정리
-                  if (paymentTimer) {
-                    clearTimeout(paymentTimer);
-                  }
-
-                  // 2초 후 자동으로 결제 성공 처리
-                  console.log('⏰ 2초 후 자동 결제 성공 처리 시작');
-                  const timer = setTimeout(() => {
-                    console.log('✅ 타이머 기반 결제 성공 처리');
-                    if (showPaymentModal) {
-                      handlePaymentSuccess();
-                    }
-                  }, 2000);
-
-                  setPaymentTimer(timer as any);
                 }
                 if (navState.url.includes('sandbox-pay.nicepay.co.kr')) {
                   console.log('💳 NicePay 결제 화면 로드됨:', navState.url);
+                }
+                // 백엔드 응답 URL 추적 (결제 완료 시그널 전 단계)
+                if (
+                  navState.url.includes('/api/payment/approve') ||
+                  navState.url.includes('/approve')
+                ) {
+                  console.log('🔗 백엔드 결제 승인 응답 URL:', navState.url);
+                  console.log(
+                    '🔗 백엔드로부터 결제 완료 시그널 URL 리다이렉트 예상'
+                  );
+                }
+                // 결제 완료 시그널 URL 접근 시도 감지
+                if (navState.url.startsWith(PAYMENT_RESULT_URL)) {
+                  console.log(
+                    '🔗 결제 완료 시그널 URL 접근 감지:',
+                    navState.url
+                  );
+                  console.log('🔗 (onShouldStartLoadWithRequest에서 처리됨)');
                 }
               }}
               onMessage={(event) => {
@@ -698,6 +790,7 @@ export default function ChatsScreen() {
         visible={showPaymentSuccessModal}
         transparent={true}
         animationType="fade"
+        statusBarTranslucent={true}
         onRequestClose={() => setShowPaymentSuccessModal(false)}
       >
         <View style={styles.modalOverlay}>
@@ -724,6 +817,7 @@ export default function ChatsScreen() {
         visible={showPaymentFailureModal}
         transparent={true}
         animationType="fade"
+        statusBarTranslucent={true}
         onRequestClose={() => setShowPaymentFailureModal(false)}
       >
         <View style={styles.modalOverlay}>
@@ -969,9 +1063,10 @@ const styles = StyleSheet.create({
   // 결제 결과 모달 스타일
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    backgroundColor: 'rgba(0, 0, 0, 0.95)',
     justifyContent: 'center',
     alignItems: 'center',
+    paddingTop: 0,
   },
   resultModalContainer: {
     backgroundColor: '#121216',

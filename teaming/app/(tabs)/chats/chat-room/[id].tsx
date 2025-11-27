@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   TouchableOpacity,
   TextInput,
   Image,
@@ -13,11 +12,14 @@ import {
   Modal,
   Alert,
   ActivityIndicator,
+  FlatList,
+  Keyboard,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StatusBar } from 'expo-status-bar';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import ChatBubble from '@/src/components/ChatBubble';
@@ -55,6 +57,7 @@ interface Message {
   isMe: boolean;
   readCount?: number; // 선택적 속성으로 변경 (나중에 사용 예정)
   attachments?: any[]; // 파일 첨부 정보
+  createdAt?: string; // 날짜 구분선을 위한 생성 시간
 }
 
 interface ChatRoomData {
@@ -74,12 +77,38 @@ export default function ChatRoomScreen() {
     title?: string;
     ready?: string;
   }>();
+  const insets = useSafeAreaInsets();
   const [inputText, setInputText] = useState('');
   const [showFileMenu, setShowFileMenu] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+  // 하단바 높이 계산 (탭바 높이: 50 + Math.max(insets.bottom, 20))
+  const tabBarHeight = 40 + Math.max(insets.bottom, 20);
+
+  // 키보드 이벤트 리스너
+  useEffect(() => {
+    const keyboardWillShowListener = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      (e) => {
+        setKeyboardHeight(e.endCoordinates.height);
+      }
+    );
+    const keyboardWillHideListener = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => {
+        setKeyboardHeight(0);
+      }
+    );
+
+    return () => {
+      keyboardWillShowListener.remove();
+      keyboardWillHideListener.remove();
+    };
+  }, []);
 
   // 텍스트 입력창 높이 계산
   const getInputHeight = (text: string) => {
-    const baseHeight = 44; // 기본 높이
+    const baseHeight = 39; // 기본 높이
     const lineHeight = 22; // 한 줄 높이
     const maxLines = 4; // 최대 줄 수
 
@@ -112,7 +141,9 @@ export default function ChatRoomScreen() {
   const [actualMembers, setActualMembers] = useState<any[]>([]);
   const [showTeamCompleteModal, setShowTeamCompleteModal] = useState(false);
   const [teamCompleteTeamName, setTeamCompleteTeamName] = useState<string>('');
-  const scrollViewRef = useRef<ScrollView>(null);
+  const listRef = useRef<FlatList<any>>(null);
+  // 입력 바(플러스+텍스트박스+전송버튼) 실제 높이 → 리스트 여백에 반영
+  const [inputBarHeight, setInputBarHeight] = useState(52);
 
   // JWT 토큰에서 사용자 ID 추출하는 함수
   const getUserIdFromToken = (token: string): number | null => {
@@ -171,7 +202,26 @@ export default function ChatRoomScreen() {
 
     try {
       console.log('🚀 메시지 히스토리 로드 시작 - roomId:', id);
-      const historyResponse = await getMessageHistory(Number(id));
+      const roomIdNumber = Number(id);
+
+      // NaN 체크
+      if (isNaN(roomIdNumber)) {
+        console.warn('⚠️ 유효하지 않은 roomId:', id);
+        setMessages([]);
+        return;
+      }
+
+      const historyResponse = await getMessageHistory(roomIdNumber);
+
+      // items 배열이 없거나 유효하지 않은 경우 빈 배열로 처리
+      if (!historyResponse || !Array.isArray(historyResponse.items)) {
+        console.warn(
+          '⚠️ 메시지 히스토리 응답이 유효하지 않음:',
+          historyResponse
+        );
+        setMessages([]);
+        return;
+      }
 
       // API 응답을 STOMP 메시지 형식으로 변환
       const historyMessages: ChatMessage[] = historyResponse.items.map(
@@ -208,7 +258,7 @@ export default function ChatRoomScreen() {
 
       // 히스토리 로드 후 스크롤을 맨 아래로
       setTimeout(() => {
-        scrollViewRef.current?.scrollToEnd({ animated: false });
+        listRef.current?.scrollToOffset({ offset: 0, animated: false });
       }, 200);
     } catch (error) {
       console.log('⚠️ 메시지 히스토리 로드 실패 (무시됨):', error);
@@ -316,12 +366,17 @@ export default function ChatRoomScreen() {
 
         if (token) {
           // 채팅방 읽음 처리 (unreadCount를 0으로 리셋)
-          markRoomAsRead(Number(id));
+          const roomIdNumber = Number(id);
+          if (!isNaN(roomIdNumber)) {
+            markRoomAsRead(roomIdNumber);
+          } else {
+            console.warn('⚠️ 유효하지 않은 roomId로 읽음 처리 스킵:', id);
+          }
 
           // 메시지 히스토리 로드 (웹소켓 연결과 병렬로 실행)
           loadMessageHistory();
 
-          // 웹소켓 연결 상태 확인
+          // 웹소켓 연결 상태 확인 및 연결 시도
           setConnectionStatus('connecting');
           console.log('🔍 웹소켓 연결 상태 확인 중...');
 
@@ -330,13 +385,38 @@ export default function ChatRoomScreen() {
             setConnectionStatus('connected');
             console.log('✅ 채팅방 진입 - 웹소켓 연결 확인 완료');
           } else {
-            console.log('⚠️ 웹소켓 연결되지 않음 - 구독 시도');
-            setIsConnected(false);
-            setConnectionStatus('disconnected');
+            console.log('⚠️ 웹소켓 연결되지 않음 - 연결 시도');
+            try {
+              // 웹소켓 연결 시도
+              await connectSock(token);
+              const connected = await waitForConnection(5000);
+              if (connected) {
+                setIsConnected(true);
+                setConnectionStatus('connected');
+                console.log('✅ 채팅방 진입 - 웹소켓 연결 성공');
+              } else {
+                setIsConnected(false);
+                setConnectionStatus('disconnected');
+                console.warn(
+                  '⚠️ 웹소켓 연결 타임아웃 - 채팅 기능 제한될 수 있음'
+                );
+              }
+            } catch (error) {
+              console.error('❌ 웹소켓 연결 실패:', error);
+              setIsConnected(false);
+              setConnectionStatus('disconnected');
+              // 에러가 발생해도 채팅방은 진입 가능하도록 (히스토리는 볼 수 있음)
+            }
           }
 
-          // 메시지 구독 및 읽음 경계 구독
+          // 메시지 구독 및 읽음 경계 구독 (웹소켓 연결 상태 확인 후)
           setTimeout(() => {
+            // 웹소켓 연결 상태 확인
+            if (!isWebSocketConnected()) {
+              console.warn('⚠️ 웹소켓 연결되지 않음 - 구독하지 않음');
+              return;
+            }
+
             console.log('🔔 채팅방 구독 시작 - 방 ID:', Number(id));
 
             // 메시지 구독
@@ -372,7 +452,10 @@ export default function ChatRoomScreen() {
 
                   // 새 메시지가 추가되면 자동으로 스크롤을 맨 아래로
                   setTimeout(() => {
-                    scrollViewRef.current?.scrollToEnd({ animated: true });
+                    listRef.current?.scrollToOffset({
+                      offset: 0,
+                      animated: true,
+                    });
                   }, 100);
 
                   return newMessages;
@@ -426,7 +509,10 @@ export default function ChatRoomScreen() {
   console.log('🔄 현재 메시지 개수:', messages.length);
   console.log('🔄 현재 메시지들:', messages);
   console.log('👤 현재 사용자 ID:', currentUserId);
-  const displayMessages = messages.map((msg: ChatMessage) => {
+
+  // messages 배열 안전성 체크
+  const safeMessages = Array.isArray(messages) ? messages : [];
+  const displayMessages = safeMessages.map((msg: ChatMessage) => {
     console.log('📨 메시지 변환:', {
       messageId: msg.messageId,
       type: msg.type,
@@ -462,6 +548,7 @@ export default function ChatRoomScreen() {
             minute: '2-digit',
             hour12: true,
           }),
+      createdAt: msg.createdAt || new Date().toISOString(),
       isMe, // 현재 사용자 ID와 비교
       attachments: formattedAttachments, // 파일 첨부 정보 추가
       // readCount: 1, // TODO: 실제 읽음 수 구현 - 주석 처리 (나중에 사용 예정)
@@ -590,13 +677,19 @@ export default function ChatRoomScreen() {
       // 연결 상태와 관계없이 메시지 전송 시도
       console.log('📤 메시지 전송 시작:', inputText.trim());
       try {
-        sendTextSock(Number(id), inputText.trim());
+        const roomIdNumber = Number(id);
+        if (isNaN(roomIdNumber)) {
+          console.error('❌ 유효하지 않은 roomId:', id);
+          Alert.alert('오류', '유효하지 않은 채팅방 ID입니다.');
+          return;
+        }
+        sendTextSock(roomIdNumber, inputText.trim());
         console.log('📤 메시지 전송 완료');
         setInputText('');
 
         // 스크롤을 맨 아래로
         setTimeout(() => {
-          scrollViewRef.current?.scrollToEnd({ animated: true });
+          listRef.current?.scrollToOffset({ offset: 0, animated: true });
         }, 100);
       } catch (error) {
         console.error('❌ 메시지 전송 실패:', error);
@@ -765,11 +858,26 @@ export default function ChatRoomScreen() {
       const intentData = await intentResponse.json();
       console.log('Intent 성공:', intentData);
 
+      // intentData 유효성 검증
+      if (!intentData || !intentData.url || !intentData.key) {
+        console.error('❌ Intent 응답이 유효하지 않음:', intentData);
+        Alert.alert(
+          '업로드 실패',
+          '파일 업로드 준비 응답이 유효하지 않습니다.'
+        );
+        return;
+      }
+
       // 2. S3에 파일 업로드
       console.log('=== S3 업로드 시작 ===');
 
       // 파일을 Blob으로 변환 (프론트엔드와 동일한 방식)
       const response = await fetch(fileUri);
+      if (!response.ok) {
+        console.error('❌ 파일 읽기 실패:', response.status);
+        Alert.alert('업로드 실패', '파일을 읽을 수 없습니다.');
+        return;
+      }
       const blob = await response.blob();
 
       const s3UploadResponse = await fetch(intentData.url, {
@@ -819,14 +927,32 @@ export default function ChatRoomScreen() {
       const completeData = await completeResponse.json();
       console.log('파일 업로드 완료:', completeData);
 
+      // completeData 유효성 검증
+      if (!completeData || !completeData.fileId) {
+        console.error('❌ Complete 응답이 유효하지 않음:', completeData);
+        Alert.alert(
+          '업로드 실패',
+          '파일 업로드 완료 응답이 유효하지 않습니다.'
+        );
+        return;
+      }
+
+      // roomId 유효성 검증
+      const roomIdNumber = Number(id);
+      if (isNaN(roomIdNumber)) {
+        console.error('❌ 유효하지 않은 roomId:', id);
+        Alert.alert('업로드 실패', '유효하지 않은 채팅방 ID입니다.');
+        return;
+      }
+
       // 4. 파일 타입에 따라 WebSocket 메시지 타입 결정
       const messageType = fileType === 'image' ? 'IMAGE' : 'FILE';
 
       // 5. WebSocket으로 파일 메시지 전송 (fileId 배열로 전달)
       if (messageType === 'IMAGE') {
-        sendImageSock(Number(id), fileName, [completeData.fileId], fileSize);
+        sendImageSock(roomIdNumber, fileName, [completeData.fileId], fileSize);
       } else {
-        sendFileSock(Number(id), fileName, [completeData.fileId], fileSize);
+        sendFileSock(roomIdNumber, fileName, [completeData.fileId], fileSize);
       }
 
       Alert.alert(
@@ -836,7 +962,7 @@ export default function ChatRoomScreen() {
 
       // 스크롤을 맨 아래로
       setTimeout(() => {
-        scrollViewRef.current?.scrollToEnd({ animated: true });
+        listRef.current?.scrollToOffset({ offset: 0, animated: true });
       }, 100);
     } catch (error: any) {
       console.error('❌ 파일 업로드 실패:', error);
@@ -852,10 +978,52 @@ export default function ChatRoomScreen() {
     }
   };
 
+  // 날짜 포맷팅 함수 - 항상 전체 날짜 형식만 사용
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    const weekdays = [
+      '일요일',
+      '월요일',
+      '화요일',
+      '수요일',
+      '목요일',
+      '금요일',
+      '토요일',
+    ];
+    const weekday = weekdays[date.getDay()];
+    return `${date.getFullYear()}년 ${
+      date.getMonth() + 1
+    }월 ${date.getDate()}일 ${weekday}`;
+  };
+
+  // 같은 날짜인지 확인하는 함수
+  const isSameDate = (dateString1: string, dateString2: string) => {
+    const date1 = new Date(dateString1);
+    const date2 = new Date(dateString2);
+    return (
+      date1.getDate() === date2.getDate() &&
+      date1.getMonth() === date2.getMonth() &&
+      date1.getFullYear() === date2.getFullYear()
+    );
+  };
+
   const renderMessage = (message: Message, index: number) => {
-    const prevMessage = index > 0 ? displayMessages[index - 1] : null;
+    // FlatList에 reverse된 배열이 전달되므로, 원본 displayMessages에서 찾아야 함
+    // reverse된 배열의 index는: reverseIndex = displayMessages.length - 1 - index
+    // 실제 이전 메시지는 원본 배열에서: reverseIndex - 1
+    const reverseIndex = displayMessages.length - 1 - index;
+    const prevMessage =
+      reverseIndex > 0 ? displayMessages[reverseIndex - 1] : null;
+
+    // 날짜가 바뀌는지 확인 (실제 시간 순서대로: 이전 메시지가 더 오래된 메시지)
+    const showDateSeparator =
+      !prevMessage ||
+      !prevMessage.createdAt ||
+      !message.createdAt ||
+      !isSameDate(prevMessage.createdAt, message.createdAt);
 
     // 카카오톡과 동일한 로직: 같은 사람 + 같은 시간대 = 연속 메시지
+    // prevMessage는 원본 배열에서 찾은 실제 이전 메시지
     const isSameUser = prevMessage
       ? prevMessage.user === message.user && prevMessage.isMe === message.isMe
       : false;
@@ -871,6 +1039,15 @@ export default function ChatRoomScreen() {
 
     return (
       <View key={message.id} style={styles.messageContainer}>
+        {/* 날짜 구분선 */}
+        {showDateSeparator && message.createdAt && (
+          <View style={styles.dateSeparator}>
+            <Ionicons name="calendar-outline" size={16} color="#666666" />
+            <Text style={styles.dateSeparatorText}>
+              {formatDate(message.createdAt)}
+            </Text>
+          </View>
+        )}
         {showUserInfo && (
           <View style={styles.userInfo}>
             <Image source={message.userImage} style={styles.userAvatar} />
@@ -958,22 +1135,41 @@ export default function ChatRoomScreen() {
       {/* 메시지 목록 */}
       <KeyboardAvoidingView
         style={styles.chatContainer}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={0}
+        enabled={false}
       >
-        <ScrollView
-          ref={scrollViewRef}
+        <FlatList
+          ref={listRef}
+          data={[...displayMessages].reverse()}
+          inverted
+          keyExtractor={(m) => String(m.id)}
+          renderItem={({ item, index }) => renderMessage(item, index)}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
           style={styles.messagesContainer}
           contentContainerStyle={styles.messagesContent}
-          showsVerticalScrollIndicator={false}
-        >
-          {displayMessages.map((message, index) =>
-            renderMessage(message, index)
-          )}
-        </ScrollView>
+          onContentSizeChange={() => {
+            // 새 메시지/초기 로딩 때 하단 고정
+            listRef.current?.scrollToOffset({ offset: 0, animated: true });
+          }}
+        />
 
         {/* 메시지 입력창 */}
-        <View style={styles.inputContainer}>
+        <View
+          style={[
+            styles.inputContainer,
+            {
+              paddingBottom:
+                keyboardHeight > 0 ? keyboardHeight + 8.5 : tabBarHeight + 12,
+            },
+          ]}
+          onLayout={(e) => {
+            const h = e.nativeEvent.layout.height;
+            // 급격한 튐 방지용 클램프
+            setInputBarHeight(Math.max(44, Math.min(140, h)));
+          }}
+        >
           <TouchableOpacity
             style={styles.plusButton}
             onPress={() => setShowFileMenu(true)}
@@ -1137,7 +1333,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 4,
-    marginLeft: -10,
+    marginLeft: 0,
   },
   userAvatar: {
     width: 30,
@@ -1154,7 +1350,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
     paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingVertical: 7,
     backgroundColor: '#121216',
     borderTopWidth: 1,
     borderTopColor: '#292929',
@@ -1167,7 +1363,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 8,
-    marginBottom: 7,
+    marginBottom: 4,
     borderWidth: 1,
     borderColor: '#292929',
   },
@@ -1179,9 +1375,8 @@ const styles = StyleSheet.create({
     borderColor: '#292929',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    fontSize: 16,
+    fontSize: 14,
     color: '#FFFFFF',
-    minHeight: 44, // 최소 높이 설정
     maxHeight: 132, // 최대 높이 설정 (3줄 정도)
     marginRight: 12,
   },
@@ -1189,7 +1384,7 @@ const styles = StyleSheet.create({
     width: 30,
     height: 30,
     borderRadius: 20,
-    marginBottom: 7,
+    marginBottom: 4,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1338,6 +1533,18 @@ const styles = StyleSheet.create({
   progressText: {
     fontSize: 14,
     color: '#CCCCCC',
+    fontWeight: '500',
+  },
+  dateSeparator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: 16,
+    gap: 6,
+  },
+  dateSeparatorText: {
+    fontSize: 13,
+    color: '#666666',
     fontWeight: '500',
   },
 });

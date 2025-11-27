@@ -3,6 +3,7 @@ import React, { useMemo, useRef } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { WebView } from 'react-native-webview';
 import apiClient from '../services/api';
+import { registerPushToken } from '../services/pushNotificationService';
 
 interface Props {
   onLoginSuccess: (result: any) => void;
@@ -171,6 +172,9 @@ export default function GoogleLoginWebView({
           loginType: 'google',
           user: res.data.user,
         });
+
+        // Push Token 등록
+        await registerPushToken();
 
         onLoginSuccess(res.data);
       } else {

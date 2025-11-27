@@ -5,12 +5,12 @@
     "owner": "staralstjr",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/tmlogo.png",
     "scheme": "teaming",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "buildNumber": "21",
+      "buildNumber": "48",
       "supportsTablet": true,
       "bundleIdentifier": "com.teaming.app",
       "infoPlist": {
@@ -113,6 +113,9 @@
           ]
         }
       ],
+      "permissions": [
+        "RECEIVE_BOOT_COMPLETED"
+      ],
       "manifest": {
         "application": {
           "meta-data": [
@@ -142,7 +145,15 @@
       ],
       "expo-web-browser",
       "expo-apple-authentication",
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/tmlogo.png",
+          "color": "#ffffff",
+          "sounds": []
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

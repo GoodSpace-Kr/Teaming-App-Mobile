@@ -104,19 +104,38 @@ export default function TaskListScreen() {
         console.log('🔑 토큰 앞 20자:', token.substring(0, 20) + '...');
       }
 
-      const tasks = await TaskService.getTasks(Number(roomId));
+      // roomId 유효성 검증
+      const roomIdNumber = Number(roomId);
+      if (isNaN(roomIdNumber)) {
+        console.error('❌ 유효하지 않은 roomId:', roomId);
+        Alert.alert('오류', '유효하지 않은 채팅방 ID입니다.');
+        setIsLoading(false);
+        return;
+      }
+
+      const tasks = await TaskService.getTasks(roomIdNumber);
+
+      // tasks 배열 안전성 체크
+      if (!Array.isArray(tasks)) {
+        console.warn('⚠️ tasks가 배열이 아닙니다:', tasks);
+        setTasks([]);
+        setIsLoading(false);
+        return;
+      }
 
       // 실제 roomMembers 정보를 TaskMember 형식으로 변환
       const memberMap = new Map<number, TaskMember>();
-      roomMembers.forEach((member) => {
-        const name =
-          member.roomRole === 'LEADER' ? `${member.name}(팀장)` : member.name;
-        memberMap.set(member.memberId, {
-          id: member.memberId,
-          name: name,
-          hasSubmitted: false,
+      if (Array.isArray(roomMembers)) {
+        roomMembers.forEach((member) => {
+          const name =
+            member.roomRole === 'LEADER' ? `${member.name}(팀장)` : member.name;
+          memberMap.set(member.memberId, {
+            id: member.memberId,
+            name: name,
+            hasSubmitted: false,
+          });
         });
-      });
+      }
 
       // 백엔드 Task를 UI용 TaskWithMembers로 변환
       const transformedTasks = tasks.map((task) =>
@@ -203,8 +222,16 @@ export default function TaskListScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
+              // roomId 유효성 검증
+              const roomIdNumber = Number(roomId);
+              if (isNaN(roomIdNumber)) {
+                console.error('❌ 유효하지 않은 roomId:', roomId);
+                Alert.alert('오류', '유효하지 않은 채팅방 ID입니다.');
+                return;
+              }
+
               console.log('🗑️ 과제 삭제:', task.assignmentId, task.title);
-              await TaskService.deleteTask(Number(roomId), task.assignmentId);
+              await TaskService.deleteTask(roomIdNumber, task.assignmentId);
 
               // 목록에서 제거
               setTasks((prev) =>
@@ -394,7 +421,9 @@ export default function TaskListScreen() {
             </Text>
           </View>
         ) : (
-          <View style={styles.tasksContainer}>{tasks.map(renderTaskItem)}</View>
+          <View style={styles.tasksContainer}>
+            {(Array.isArray(tasks) ? tasks : []).map(renderTaskItem)}
+          </View>
         )}
       </ScrollView>
     </View>

@@ -26,6 +26,7 @@ export default function GifticonScreen() {
   const [gifticons, setGifticons] = useState<GifticonItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
+  const [usedGifticons, setUsedGifticons] = useState<Set<string>>(new Set());
 
   // 방 등급별 기프티콘 정보 (create-team.tsx에서 가져온 정보)
   const roomTypes = [
@@ -119,10 +120,31 @@ export default function GifticonScreen() {
     }
   };
 
+  // 기프티콘 사용 처리
+  const handleUseGifticon = (gifticonCode: string) => {
+    Alert.alert('기프티콘 사용', '사용 하셨습니까?', [
+      {
+        text: '취소',
+        style: 'cancel',
+      },
+      {
+        text: '사용했음',
+        onPress: () => {
+          setUsedGifticons((prev) => {
+            const newSet = new Set(prev);
+            newSet.add(gifticonCode);
+            return newSet;
+          });
+        },
+      },
+    ]);
+  };
+
   // 기프티콘 카드 컴포넌트
   const GifticonCard = ({ gifticon }: { gifticon: GifticonItem }) => {
     const gifticonInfo = getGifticonInfo(gifticon.grade);
     const expirationDate = formatDate(gifticon.expirationDateStr);
+    const isUsed = usedGifticons.has(gifticon.code);
 
     return (
       <View style={styles.gifticonCard}>
@@ -150,8 +172,19 @@ export default function GifticonScreen() {
           <Text style={styles.barcodeText}>바코드: {gifticon.code}</Text>
         </View>
 
-        <TouchableOpacity style={styles.useButton}>
-          <Text style={styles.useButtonText}>사용하기</Text>
+        <TouchableOpacity
+          style={[styles.useButton, isUsed && styles.useButtonDisabled]}
+          onPress={() => handleUseGifticon(gifticon.code)}
+          disabled={isUsed}
+        >
+          <Text
+            style={[
+              styles.useButtonText,
+              isUsed && styles.useButtonTextDisabled,
+            ]}
+          >
+            {isUsed ? '사용 완료' : '사용하기'}
+          </Text>
         </TouchableOpacity>
       </View>
     );
@@ -338,10 +371,16 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     alignItems: 'center',
   },
+  useButtonDisabled: {
+    backgroundColor: '#666666',
+  },
   useButtonText: {
     fontSize: 14,
     fontWeight: '600',
     color: '#FFFFFF',
+  },
+  useButtonTextDisabled: {
+    color: '#CCCCCC',
   },
   footerContainer: {
     position: 'absolute',

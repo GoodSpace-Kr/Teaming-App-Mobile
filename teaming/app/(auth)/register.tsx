@@ -614,7 +614,10 @@ export default function RegisterScreen() {
     <View style={styles.container}>
       <StatusBar style="light" />
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+      >
         {/* 헤더 */}
         <View style={styles.headerSection}>
           {currentStep === 1 ? (

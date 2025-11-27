@@ -4,9 +4,9 @@ import FileChatBubble from './FileChatBubble';
 
 interface FileAttachment {
   fileId: number;
-  fileName: string;
-  contentType: string;
-  size?: number;
+  name: string;
+  mimeType: string;
+  byteSize?: number;
 }
 
 interface ChatBubbleProps {

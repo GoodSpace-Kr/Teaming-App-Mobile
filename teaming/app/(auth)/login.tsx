@@ -19,6 +19,7 @@ import NaverLoginWebView from '../../src/components/NaverLoginWebView';
 import AppleLoginButton from '../../src/components/AppleLoginButton';
 import { login, LoginRequest } from '../../src/services/api';
 import { saveTokens } from '../../src/services/tokenManager';
+import { registerPushToken } from '../../src/services/pushNotificationService';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -54,6 +55,9 @@ export default function LoginScreen() {
       });
 
       console.log('로그인 성공, 토큰 저장 완료');
+
+      // Push Token 등록
+      await registerPushToken();
 
       // 메인 화면으로 이동
       router.replace('/(tabs)');
@@ -202,7 +206,10 @@ export default function LoginScreen() {
     <View style={styles.container}>
       <StatusBar style="light" />
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+      >
         {/* 상단 헤더 (뒤로가기 + 제목) */}
         <View style={styles.headerSection}>
           <TouchableOpacity

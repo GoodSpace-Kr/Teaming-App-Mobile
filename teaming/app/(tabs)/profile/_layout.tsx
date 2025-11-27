@@ -2,7 +2,12 @@ import { Stack } from 'expo-router';
 
 export default function ProfileLayout() {
   return (
-    <Stack>
+    <Stack
+      screenOptions={{
+        gestureEnabled: true,
+        gestureDirection: 'horizontal',
+      }}
+    >
       <Stack.Screen
         name="index"
         options={{

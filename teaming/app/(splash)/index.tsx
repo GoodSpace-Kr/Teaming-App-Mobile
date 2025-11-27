@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Animated } from 'react-native';
 import { router } from 'expo-router';
 import TeamAvatars from '../../src/components/TeamAvatars';
+import { isLoggedIn } from '../../src/services/tokenManager';
 
 export default function SplashScreen() {
   const animate = useRef(new Animated.Value(0)).current;
@@ -43,9 +44,22 @@ export default function SplashScreen() {
     mainAnimation.start();
     pulseAnimation.start();
 
-    // 3초 후 로그인 전 화면으로 이동
-    const timer = setTimeout(() => {
-      router.replace('/(auth)');
+    // 3초 후 토큰 확인하여 적절한 화면으로 이동
+    const timer = setTimeout(async () => {
+      try {
+        const loggedIn = await isLoggedIn();
+        if (loggedIn) {
+          // 토큰이 있으면 메인 화면으로 이동
+          router.replace('/(tabs)');
+        } else {
+          // 토큰이 없으면 로그인 화면으로 이동
+          router.replace('/(auth)');
+        }
+      } catch (error) {
+        console.error('로그인 상태 확인 실패:', error);
+        // 에러 발생 시 로그인 화면으로 이동
+        router.replace('/(auth)');
+      }
     }, 3000);
 
     return () => {

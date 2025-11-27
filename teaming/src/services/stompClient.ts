@@ -178,9 +178,17 @@ export async function connectSock(token?: string) {
               } as any;
               c.activate();
               return;
+            } else {
+              // 토큰 갱신 실패 시 조용히 처리 (앱이 튕기지 않도록)
+              console.log('⚠️ 토큰 갱신 실패, 자동 재연결 시도합니다');
             }
-          } catch (e) {
-            console.warn('🔄 토큰 갱신 실패:', e);
+          } catch (e: any) {
+            // 에러를 조용히 처리 (앱이 튕기지 않도록)
+            if (__DEV__) {
+              console.warn('🔄 토큰 갱신 중 에러 (조용히 처리):', e?.message || e);
+            } else {
+              console.log('⚠️ 토큰 갱신 중 일시적 오류, 자동 재연결 시도합니다');
+            }
           }
         }
         // 이후 재연결은 stomp-js의 reconnectDelay에 맡김

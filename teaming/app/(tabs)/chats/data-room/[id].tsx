@@ -126,7 +126,7 @@ export default function DataRoomScreen() {
           '파일 정보',
           `파일명: ${file.name}\n크기: ${FileService.formatFileSize(
             file.size
-          )}\n업로드: ${file.uploadedBy}\n시간: ${file.uploadedAt}`,
+          )}\n업로드: ${file.uploadedBy}`,
           [{ text: '확인' }]
         );
       }
@@ -168,7 +168,6 @@ export default function DataRoomScreen() {
           <Text style={styles.fileSeparator}>•</Text>
           <Text style={styles.fileUploader}>{file.uploadedBy}</Text>
         </View>
-        <Text style={styles.fileDate}>{file.uploadedAt}</Text>
       </View>
     </TouchableOpacity>
   );
@@ -319,10 +318,6 @@ const styles = StyleSheet.create({
     height: 16,
     borderRadius: 8,
     marginRight: 6,
-  },
-  fileDate: {
-    fontSize: 12,
-    color: '#888888',
   },
   emptySection: {
     alignItems: 'center',

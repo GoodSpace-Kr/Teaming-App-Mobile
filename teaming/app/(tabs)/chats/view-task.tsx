@@ -140,8 +140,21 @@ export default function ViewTaskScreen() {
       }
 
       // 1. 먼저 과제 목록을 가져와서 해당 과제 찾기
-      const tasks = await TaskService.getTasks(Number(roomId));
-      const targetTask = tasks.find((task) => task.assignmentId === Number(id));
+      const roomIdNumber = Number(roomId);
+      const taskIdNumber = Number(id);
+
+      // NaN 체크
+      if (isNaN(roomIdNumber) || isNaN(taskIdNumber)) {
+        console.error('❌ 유효하지 않은 ID:', { roomId, id });
+        Alert.alert('오류', '유효하지 않은 과제 또는 채팅방 ID입니다.');
+        router.back();
+        return;
+      }
+
+      const tasks = await TaskService.getTasks(roomIdNumber);
+      const targetTask = tasks.find(
+        (task) => task.assignmentId === taskIdNumber
+      );
 
       if (targetTask) {
         // 백엔드 Task를 UI용 TaskWithMembers로 변환
@@ -260,15 +273,31 @@ export default function ViewTaskScreen() {
 
                 const file = fileResult.assets[0];
                 try {
+                  // roomId 유효성 검증
+                  const roomIdNumber = Number(roomId);
+                  if (isNaN(roomIdNumber)) {
+                    console.error('❌ 유효하지 않은 roomId:', roomId);
+                    continue;
+                  }
+
                   // 파일 업로드 의도 등록
                   const uploadIntent = await FileService.getUploadIntent(
-                    Number(roomId),
+                    roomIdNumber,
                     {
                       fileName: file.name || 'Unknown File',
                       size: file.size || 0,
                       contentType: file.mimeType || 'application/octet-stream',
                     }
                   );
+
+                  // uploadIntent 유효성 검증
+                  if (!uploadIntent || !uploadIntent.url || !uploadIntent.key) {
+                    console.error(
+                      '❌ 업로드 Intent 응답이 유효하지 않음:',
+                      uploadIntent
+                    );
+                    continue;
+                  }
 
                   // S3에 파일 업로드
                   const uploadSuccess = await FileService.uploadToS3(
@@ -285,9 +314,18 @@ export default function ViewTaskScreen() {
                   if (uploadSuccess) {
                     // 업로드 완료 등록
                     const completeResponse = await FileService.completeUpload(
-                      Number(roomId),
+                      roomIdNumber,
                       uploadIntent.key
                     );
+
+                    // completeResponse 유효성 검증
+                    if (!completeResponse || !completeResponse.fileId) {
+                      console.error(
+                        '❌ 업로드 완료 응답이 유효하지 않음:',
+                        completeResponse
+                      );
+                      continue;
+                    }
 
                     fileIds.push(completeResponse.fileId);
                     console.log(
@@ -302,7 +340,15 @@ export default function ViewTaskScreen() {
               }
             }
 
-            await TaskService.submitTask(Number(roomId), {
+            // roomId 유효성 재검증
+            const roomIdNumber = Number(roomId);
+            if (isNaN(roomIdNumber)) {
+              console.error('❌ 유효하지 않은 roomId:', roomId);
+              Alert.alert('오류', '유효하지 않은 채팅방 ID입니다.');
+              return;
+            }
+
+            await TaskService.submitTask(roomIdNumber, {
               taskId: taskInfo.assignmentId,
               content: submissionText,
               fileIds: fileIds,

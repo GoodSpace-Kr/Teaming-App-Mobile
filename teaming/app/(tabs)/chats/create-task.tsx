@@ -15,6 +15,7 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { TaskService } from '@/src/services/taskService';
 import { CreateTaskRequest } from '@/src/types/task';
 import { getUserInfo } from '@/src/services/api';
@@ -24,20 +25,41 @@ const { width } = Dimensions.get('window');
 interface TeamMember {
   id: number;
   name: string;
-  avatar: any;
+  avatar: { uri: string } | null;
   isSelected: boolean;
 }
 
 export default function CreateTaskScreen() {
+  const insets = useSafeAreaInsets();
   const { roomId, members } = useLocalSearchParams<{
     roomId: string;
     members?: string;
   }>();
   const [taskTitle, setTaskTitle] = useState('');
   const [taskDescription, setTaskDescription] = useState('');
-  const [selectedMonth, setSelectedMonth] = useState('09');
-  const [selectedDay, setSelectedDay] = useState('07');
-  const [selectedTime, setSelectedTime] = useState('07:00');
+
+  // 하단바 높이 계산 (탭바 높이: 50 + Math.max(insets.bottom, 20))
+  const tabBarHeight = 50 + Math.max(insets.bottom, 20);
+  // 현재 시간을 기준으로 초기값 설정 (30분 단위로 반올림)
+  const getCurrentDateTime = () => {
+    const now = new Date();
+    // 분을 30분 단위로 반올림
+    const minutes = Math.round(now.getMinutes() / 30) * 30;
+    const roundedMinutes = minutes === 60 ? 0 : minutes;
+    const roundedHours = minutes === 60 ? now.getHours() + 1 : now.getHours();
+    return {
+      month: String(now.getMonth() + 1).padStart(2, '0'),
+      day: String(now.getDate()).padStart(2, '0'),
+      hour: String(roundedHours >= 24 ? 23 : roundedHours).padStart(2, '0'),
+      minute: String(roundedMinutes).padStart(2, '0'),
+    };
+  };
+  const currentDateTime = getCurrentDateTime();
+  const [selectedMonth, setSelectedMonth] = useState(currentDateTime.month);
+  const [selectedDay, setSelectedDay] = useState(currentDateTime.day);
+  const [selectedTime, setSelectedTime] = useState(
+    `${currentDateTime.hour}:${currentDateTime.minute}`
+  );
   const [showMonthPicker, setShowMonthPicker] = useState(false);
   const [showDayPicker, setShowDayPicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
@@ -83,12 +105,12 @@ export default function CreateTaskScreen() {
                   name:
                     member.roomRole === 'LEADER'
                       ? `${member.name}(팀장)`
-                      : member.name,
+                      : member.name || '',
                   avatar: member.avatarUrl
                     ? { uri: member.avatarUrl }
                     : member.avatarKey
                     ? { uri: member.avatarKey }
-                    : getDefaultAvatar(member.memberId),
+                    : null,
                   isSelected: false,
                 })
               );
@@ -101,74 +123,25 @@ export default function CreateTaskScreen() {
               return;
             } else {
               console.warn('⚠️ members 데이터가 빈 배열이거나 유효하지 않음');
-              throw new Error('Invalid members data');
+              setTeamMembers([]);
+              setIsLoading(false);
+              return;
             }
           } catch (parseError) {
             console.error('❌ members 파싱 실패:', parseError);
-            console.log('🔄 기본 멤버 정보로 폴백');
-            // 기본 멤버 정보 사용하도록 계속 진행
+            setTeamMembers([]);
+            setIsLoading(false);
+            return;
           }
         } else {
           console.warn('⚠️ members 파라미터가 없거나 비어있음');
+          setTeamMembers([]);
+          setIsLoading(false);
+          return;
         }
-
-        // 2. members 정보가 없는 경우 기본 멤버 정보 사용
-        console.warn('⚠️ members 정보가 없음 - 기본 멤버 정보 사용');
-        setTeamMembers([
-          {
-            id: 1,
-            name: '최순조(팀장)',
-            avatar: require('../../../assets/images/(chattingRoom)/choi.png'),
-            isSelected: false,
-          },
-          {
-            id: 2,
-            name: '권민석',
-            avatar: require('../../../assets/images/(chattingRoom)/me.png'),
-            isSelected: false,
-          },
-          {
-            id: 3,
-            name: '정치학존잘남',
-            avatar: require('../../../assets/images/(chattingRoom)/politicMan.png'),
-            isSelected: false,
-          },
-          {
-            id: 4,
-            name: '팀플하기싫다',
-            avatar: require('../../../assets/images/(chattingRoom)/noTeample.png'),
-            isSelected: false,
-          },
-        ]);
       } catch (error) {
         console.error('❌ 팀 정보 로드 실패:', error);
-        // 에러 발생 시 기본 멤버 정보 사용
-        setTeamMembers([
-          {
-            id: 1,
-            name: '최순조(팀장)',
-            avatar: require('../../../assets/images/(chattingRoom)/choi.png'),
-            isSelected: false,
-          },
-          {
-            id: 2,
-            name: '권민석',
-            avatar: require('../../../assets/images/(chattingRoom)/me.png'),
-            isSelected: false,
-          },
-          {
-            id: 3,
-            name: '정치학존잘남',
-            avatar: require('../../../assets/images/(chattingRoom)/politicMan.png'),
-            isSelected: false,
-          },
-          {
-            id: 4,
-            name: '팀플하기싫다',
-            avatar: require('../../../assets/images/(chattingRoom)/noTeample.png'),
-            isSelected: false,
-          },
-        ]);
+        setTeamMembers([]);
       } finally {
         setIsLoading(false);
       }
@@ -176,17 +149,6 @@ export default function CreateTaskScreen() {
 
     loadTeamMembers();
   }, [roomId, members]);
-
-  // 기본 아바타 매핑 함수
-  const getDefaultAvatar = (memberId: number) => {
-    const avatars = [
-      require('../../../assets/images/(chattingRoom)/choi.png'),
-      require('../../../assets/images/(chattingRoom)/me.png'),
-      require('../../../assets/images/(chattingRoom)/politicMan.png'),
-      require('../../../assets/images/(chattingRoom)/noTeample.png'),
-    ];
-    return avatars[memberId % avatars.length];
-  };
 
   const handleBackPress = () => {
     router.back();
@@ -235,9 +197,9 @@ export default function CreateTaskScreen() {
     try {
       setIsCreating(true);
 
-      // 날짜/시간을 ISO 8601 형식으로 변환
+      // 날짜/시간을 ISO 8601 형식으로 변환 (현재 연도 사용)
       const dueDate = new Date();
-      dueDate.setFullYear(2025);
+      dueDate.setFullYear(new Date().getFullYear());
       dueDate.setMonth(parseInt(selectedMonth) - 1);
       dueDate.setDate(parseInt(selectedDay));
       dueDate.setHours(parseInt(selectedTime.split(':')[0]));
@@ -297,6 +259,21 @@ export default function CreateTaskScreen() {
     setShowTimePicker(false);
   };
 
+  // 선택한 날짜/시간이 현재 시간보다 이후인지 확인
+  const isDueDateValid = () => {
+    const dueDate = new Date();
+    dueDate.setFullYear(new Date().getFullYear());
+    dueDate.setMonth(parseInt(selectedMonth) - 1);
+    dueDate.setDate(parseInt(selectedDay));
+    dueDate.setHours(parseInt(selectedTime.split(':')[0]));
+    dueDate.setMinutes(parseInt(selectedTime.split(':')[1]));
+    dueDate.setSeconds(0);
+    dueDate.setMilliseconds(0);
+
+    const now = new Date();
+    return dueDate.getTime() >= now.getTime();
+  };
+
   const monthOptions = [
     '01',
     '02',
@@ -314,10 +291,15 @@ export default function CreateTaskScreen() {
   const dayOptions = Array.from({ length: 31 }, (_, i) =>
     String(i + 1).padStart(2, '0')
   );
-  const timeOptions = Array.from(
-    { length: 24 },
-    (_, i) => String(i).padStart(2, '0') + ':00'
-  );
+  // 시간 선택 옵션: 00:00부터 23:30까지 30분 단위
+  const timeOptions = Array.from({ length: 24 * 2 }, (_, i) => {
+    const hours = Math.floor(i / 2);
+    const minutes = (i % 2) * 30;
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(
+      2,
+      '0'
+    )}`;
+  });
 
   return (
     <View style={styles.container}>
@@ -370,7 +352,7 @@ export default function CreateTaskScreen() {
             <Text style={styles.sectionTitle}>제한시간 설정</Text>
             <View style={styles.timeContainer}>
               <View style={styles.timeRow}>
-                <Text style={styles.yearText}>2025</Text>
+                <Text style={styles.yearText}>{new Date().getFullYear()}</Text>
                 <View style={styles.timeSelector}>
                   <TouchableOpacity
                     style={styles.timeButton}
@@ -454,39 +436,62 @@ export default function CreateTaskScreen() {
           {/* 팀원 역할부여 */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>팀원 역할부여</Text>
-            {teamMembers.map((member) => (
-              <TouchableOpacity
-                key={member.id}
-                style={styles.memberItem}
-                onPress={() => handleMemberToggle(member.id)}
-              >
-                <Image source={member.avatar} style={styles.memberAvatar} />
-                <Text style={styles.memberName}>{member.name}</Text>
-                <View
-                  style={[
-                    styles.checkbox,
-                    member.isSelected && styles.checkboxSelected,
-                  ]}
+            {teamMembers.length === 0 ? (
+              <View style={styles.emptyMemberContainer}>
+                <Text style={styles.emptyMemberText}>
+                  팀원 정보가 없습니다.
+                </Text>
+              </View>
+            ) : (
+              teamMembers.map((member) => (
+                <TouchableOpacity
+                  key={member.id}
+                  style={styles.memberItem}
+                  onPress={() => handleMemberToggle(member.id)}
                 >
-                  {member.isSelected && (
-                    <Ionicons name="checkmark" size={16} color="#FFFFFF" />
+                  {member.avatar ? (
+                    <Image source={member.avatar} style={styles.memberAvatar} />
+                  ) : (
+                    <View
+                      style={[
+                        styles.memberAvatar,
+                        styles.memberAvatarPlaceholder,
+                      ]}
+                    >
+                      <Ionicons name="person" size={20} color="#666666" />
+                    </View>
                   )}
-                </View>
-              </TouchableOpacity>
-            ))}
+                  <Text style={styles.memberName}>
+                    {member.name || '이름 없음'}
+                  </Text>
+                  <View
+                    style={[
+                      styles.checkbox,
+                      member.isSelected && styles.checkboxSelected,
+                    ]}
+                  >
+                    {member.isSelected && (
+                      <Ionicons name="checkmark" size={16} color="#FFFFFF" />
+                    )}
+                  </View>
+                </TouchableOpacity>
+              ))
+            )}
           </View>
         </ScrollView>
       )}
 
       {/* 과제 생성 버튼 */}
-      <View style={styles.buttonContainer}>
+      <View
+        style={[styles.buttonContainer, { paddingBottom: tabBarHeight + 20 }]}
+      >
         <TouchableOpacity
           style={[
             styles.createButton,
-            isCreating && styles.createButtonDisabled,
+            (isCreating || !isDueDateValid()) && styles.createButtonDisabled,
           ]}
           onPress={handleCreateTask}
-          disabled={isCreating}
+          disabled={isCreating || !isDueDateValid()}
         >
           {isCreating ? (
             <View style={styles.loadingContainer}>
@@ -570,6 +575,26 @@ const styles = StyleSheet.create({
     height: 40,
     borderRadius: 15,
     marginRight: 12,
+  },
+  memberAvatarPlaceholder: {
+    backgroundColor: '#1A1A1A',
+    borderWidth: 1,
+    borderColor: '#292929',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyMemberContainer: {
+    paddingVertical: 20,
+    paddingHorizontal: 16,
+    backgroundColor: '#121216',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#292929',
+    alignItems: 'center',
+  },
+  emptyMemberText: {
+    fontSize: 14,
+    color: '#666666',
   },
   memberName: {
     flex: 1,
@@ -660,7 +685,8 @@ const styles = StyleSheet.create({
   },
   buttonContainer: {
     paddingHorizontal: 20,
-    paddingVertical: 20,
+    paddingTop: 20,
+    paddingBottom: 20,
     backgroundColor: '#000000',
   },
   createButton: {

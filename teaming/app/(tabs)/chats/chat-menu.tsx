@@ -142,7 +142,12 @@ export default function ChatMenuScreen() {
   const handleViewTasks = () => {
     // 과제 목록 화면으로 이동
     const isLeaderParam = isLeader ? `&isLeader=${isLeader}` : '';
-    router.push(`/(tabs)/chats/task-list?roomId=${roomId}${isLeaderParam}`);
+    const membersParam = members
+      ? `&members=${encodeURIComponent(members as string)}`
+      : '';
+    router.push(
+      `/(tabs)/chats/task-list?roomId=${roomId}${isLeaderParam}${membersParam}`
+    );
   };
 
   const handleLeaveRoom = () => {
@@ -154,13 +159,21 @@ export default function ChatMenuScreen() {
     if (!roomId) return;
 
     try {
+      // roomId 유효성 검증
+      const roomIdNumber = Number(roomId);
+      if (isNaN(roomIdNumber)) {
+        console.error('❌ 유효하지 않은 roomId:', roomId);
+        Alert.alert('오류', '유효하지 않은 채팅방 ID입니다.');
+        return;
+      }
+
       // 모달 닫기
       setShowLeaveModal(false);
 
       console.log('🚀 방 떠나기 API 호출 - roomId:', roomId);
 
       // 방 떠나기 API 호출
-      await apiService.leaveRoom(Number(roomId));
+      await apiService.leaveRoom(roomIdNumber);
 
       console.log('✅ 방 떠나기 성공');
 
@@ -200,11 +213,20 @@ export default function ChatMenuScreen() {
         '🔍 completeTeamProject 함수 확인:',
         typeof apiService.completeTeamProject
       );
-      console.log('🔍 roomId:', roomId, 'Number(roomId):', Number(roomId));
+      // roomId 유효성 검증
+      const roomIdNumber = Number(roomId);
+      if (isNaN(roomIdNumber)) {
+        console.error('❌ 유효하지 않은 roomId:', roomId);
+        Alert.alert('오류', '유효하지 않은 채팅방 ID입니다.');
+        setIsCompleting(false);
+        return;
+      }
+
+      console.log('🔍 roomId:', roomId, 'Number(roomId):', roomIdNumber);
 
       // PATCH API 요청으로 팀플 완료 처리
       if (typeof apiService.completeTeamProject === 'function') {
-        await apiService.completeTeamProject(Number(roomId));
+        await apiService.completeTeamProject(roomIdNumber);
       } else {
         // 직접 API 호출로 대체
         console.log('🔄 직접 API 호출로 대체');
@@ -219,7 +241,7 @@ export default function ChatMenuScreen() {
         console.log('💳 결제 취소 API 호출 시작:', { roomId });
         const cancelResponse = await apiService.default.post(
           `/payment/cancelAuth`,
-          { roomId: Number(roomId) },
+          { roomId: roomIdNumber },
           {
             headers: {
               'Content-Type': 'application/json',
@@ -263,9 +285,17 @@ export default function ChatMenuScreen() {
     if (!roomId) return;
 
     try {
+      // roomId 유효성 검증
+      const roomIdNumber = Number(roomId);
+      if (isNaN(roomIdNumber)) {
+        console.error('❌ 유효하지 않은 roomId:', roomId);
+        Alert.alert('오류', '유효하지 않은 채팅방 ID입니다.');
+        return;
+      }
+
       setIsLoadingInviteCode(true);
       console.log('🚀 초대코드 조회 - roomId:', roomId);
-      const response = await getRoomInviteCode(Number(roomId));
+      const response = await getRoomInviteCode(roomIdNumber);
       setInviteCode(response.inviteCode);
       setShowInviteModal(true);
       console.log('✅ 초대코드 조회 성공:', response.inviteCode);
@@ -359,32 +389,95 @@ export default function ChatMenuScreen() {
 
           {isTeamLeader ? (
             <TouchableOpacity
-              style={styles.menuItem}
+              style={[
+                styles.menuItem,
+                !isRoomFull() && styles.menuItemDisabled,
+              ]}
               onPress={handleCreateTask}
+              disabled={!isRoomFull()}
             >
               <View style={styles.menuIcon}>
-                <Ionicons name="add-circle" size={24} color="#007AFF" />
+                <Ionicons
+                  name="add-circle"
+                  size={24}
+                  color={isRoomFull() ? '#007AFF' : '#666666'}
+                />
               </View>
-              <Text style={styles.menuText}>과제 생성하기</Text>
-              <Ionicons name="chevron-forward" size={20} color="#666666" />
+              <Text
+                style={[
+                  styles.menuText,
+                  !isRoomFull() && styles.menuTextDisabled,
+                ]}
+              >
+                과제 생성하기
+              </Text>
+              <Ionicons
+                name="chevron-forward"
+                size={20}
+                color={isRoomFull() ? '#666666' : '#333333'}
+              />
             </TouchableOpacity>
           ) : (
-            <TouchableOpacity style={styles.menuItem} onPress={handleViewTasks}>
+            <TouchableOpacity
+              style={[
+                styles.menuItem,
+                !isRoomFull() && styles.menuItemDisabled,
+              ]}
+              onPress={handleViewTasks}
+              disabled={!isRoomFull()}
+            >
               <View style={styles.menuIcon}>
-                <Ionicons name="document-text" size={24} color="#007AFF" />
+                <Ionicons
+                  name="document-text"
+                  size={24}
+                  color={isRoomFull() ? '#007AFF' : '#666666'}
+                />
               </View>
-              <Text style={styles.menuText}>과제방</Text>
-              <Ionicons name="chevron-forward" size={20} color="#666666" />
+              <Text
+                style={[
+                  styles.menuText,
+                  !isRoomFull() && styles.menuTextDisabled,
+                ]}
+              >
+                과제방
+              </Text>
+              <Ionicons
+                name="chevron-forward"
+                size={20}
+                color={isRoomFull() ? '#666666' : '#333333'}
+              />
             </TouchableOpacity>
           )}
 
           {isTeamLeader && (
-            <TouchableOpacity style={styles.menuItem} onPress={handleViewTasks}>
+            <TouchableOpacity
+              style={[
+                styles.menuItem,
+                !isRoomFull() && styles.menuItemDisabled,
+              ]}
+              onPress={handleViewTasks}
+              disabled={!isRoomFull()}
+            >
               <View style={styles.menuIcon}>
-                <Ionicons name="document-text" size={24} color="#007AFF" />
+                <Ionicons
+                  name="document-text"
+                  size={24}
+                  color={isRoomFull() ? '#007AFF' : '#666666'}
+                />
               </View>
-              <Text style={styles.menuText}>과제방</Text>
-              <Ionicons name="chevron-forward" size={20} color="#666666" />
+              <Text
+                style={[
+                  styles.menuText,
+                  !isRoomFull() && styles.menuTextDisabled,
+                ]}
+              >
+                과제방
+              </Text>
+              <Ionicons
+                name="chevron-forward"
+                size={20}
+                color={isRoomFull() ? '#666666' : '#333333'}
+              />
             </TouchableOpacity>
           )}
         </View>
@@ -421,33 +514,35 @@ export default function ChatMenuScreen() {
         </View>
 
         {/* 팀플 완료 또는 나가기 */}
-        <View style={styles.section}>
-          {isTeamCompleted ? (
-            // 팀플 완료 후 - 모든 사용자가 방을 떠날 수 있음
-            <TouchableOpacity
-              style={styles.leaveButton}
-              onPress={handleLeaveRoom}
-            >
-              <View style={styles.leaveIcon}>
-                <Ionicons name="exit" size={24} color="#FF3B30" />
-              </View>
-              <Text style={styles.leaveText}>티밍룸 나가기</Text>
-              <Ionicons name="chevron-forward" size={20} color="#666666" />
-            </TouchableOpacity>
-          ) : isTeamLeader ? (
-            // 팀플 완료 전 - 팀장만 팀플 완료 가능
-            <TouchableOpacity
-              style={styles.completeButton}
-              onPress={handleCompleteTeam}
-            >
-              <View style={styles.completeIcon}>
-                <Ionicons name="trophy" size={24} color="#FFD700" />
-              </View>
-              <Text style={styles.completeText}>팀플 완료</Text>
-              <Ionicons name="chevron-forward" size={20} color="#666666" />
-            </TouchableOpacity>
-          ) : null}
-        </View>
+        {(isTeamCompleted || (isTeamLeader && isRoomFull())) && (
+          <View style={styles.section}>
+            {isTeamCompleted ? (
+              // 팀플 완료 후 - 모든 사용자가 방을 떠날 수 있음
+              <TouchableOpacity
+                style={styles.leaveButton}
+                onPress={handleLeaveRoom}
+              >
+                <View style={styles.leaveIcon}>
+                  <Ionicons name="exit" size={24} color="#FF3B30" />
+                </View>
+                <Text style={styles.leaveText}>티밍룸 나가기</Text>
+                <Ionicons name="chevron-forward" size={20} color="#666666" />
+              </TouchableOpacity>
+            ) : isTeamLeader && isRoomFull() ? (
+              // 팀플 완료 전 - 팀장만 팀플 완료 가능 (전 인원 입장 시에만 표시)
+              <TouchableOpacity
+                style={styles.completeButton}
+                onPress={handleCompleteTeam}
+              >
+                <View style={styles.completeIcon}>
+                  <Ionicons name="trophy" size={24} color="#FFD700" />
+                </View>
+                <Text style={styles.completeText}>팀플 완료</Text>
+                <Ionicons name="chevron-forward" size={20} color="#666666" />
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        )}
       </ScrollView>
       {/* 팀플 완료 확인 모달 */}
       <CompleteTeamModal
@@ -594,6 +689,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#FFFFFF',
     fontWeight: '500',
+  },
+  menuItemDisabled: {
+    opacity: 0.5,
+  },
+  menuTextDisabled: {
+    color: '#666666',
   },
   sectionTitle: {
     fontSize: 16,

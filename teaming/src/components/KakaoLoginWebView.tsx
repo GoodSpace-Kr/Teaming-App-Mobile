@@ -1,8 +1,9 @@
 // KakaoLoginWebView.tsx
 import React, { useMemo, useRef } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, Linking, Alert } from 'react-native';
 import { WebView } from 'react-native-webview';
 import apiClient from '../services/api';
+import { registerPushToken } from '../services/pushNotificationService';
 
 interface Props {
   onLoginSuccess: (result: any) => void;
@@ -92,6 +93,9 @@ export default function KakaoLoginWebView({
           user: res.data.user,
         });
 
+        // Push Token 등록
+        await registerPushToken();
+
         onLoginSuccess(res.data);
       } else {
         onLoginError(res.data?.message || '로그인에 실패했습니다.');
@@ -99,6 +103,28 @@ export default function KakaoLoginWebView({
     } catch (e: any) {
       console.error('❌ handleMessage error:', e?.message || e);
       onLoginError('로그인 처리 중 오류가 발생했습니다.');
+    }
+  };
+
+  // 카카오톡 앱 실행 처리
+  const handleKakaoTalkOpen = async (url: string) => {
+    try {
+      console.log('📱 카카오톡 앱 실행 시도:', url);
+      const canOpen = await Linking.canOpenURL(url);
+      
+      if (canOpen) {
+        await Linking.openURL(url);
+        console.log('✅ 카카오톡 앱 실행 성공');
+      } else {
+        console.log('❌ 카카오톡 앱이 설치되어 있지 않습니다');
+        Alert.alert(
+          '카카오톡 설치 필요',
+          '카카오톡 앱이 설치되어 있지 않습니다. 앱스토어에서 설치해주세요.',
+          [{ text: '확인' }]
+        );
+      }
+    } catch (error) {
+      console.error('❌ 카카오톡 앱 실행 실패:', error);
     }
   };
 
@@ -111,6 +137,21 @@ export default function KakaoLoginWebView({
         javaScriptEnabled
         originWhitelist={['*']}
         setSupportMultipleWindows={false}
+        // 카카오톡 앱 실행을 위한 URL 감지
+        onShouldStartLoadWithRequest={(request) => {
+          const url = request.url;
+          console.log('🌐 WebView URL 요청:', url);
+
+          // kakaotalk:// 스킴 감지 시 카카오톡 앱 실행
+          if (url.startsWith('kakaotalk://')) {
+            console.log('📱 카카오톡 딥링크 감지:', url);
+            handleKakaoTalkOpen(url);
+            return false; // WebView에서 URL 로드 차단
+          }
+
+          // 다른 URL은 정상적으로 로드
+          return true;
+        }}
         // 디버깅에 도움
         onNavigationStateChange={(nav) => console.log('➡️', nav.url)}
         onError={(e) => console.log('❌ WebView error:', e.nativeEvent)}

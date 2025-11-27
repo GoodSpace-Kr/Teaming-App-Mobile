@@ -5,6 +5,7 @@ import {
   refreshAccessToken,
   clearTokens,
 } from './tokenManager';
+import { unregisterPushToken } from './pushNotificationService';
 
 // API 기본 설정
 const API_BASE_URL = 'https://teamingkr.duckdns.org/api';
@@ -89,13 +90,38 @@ apiClient.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
-    // 에러 응답 로깅
-    console.error(
-      `❌ API 에러: ${error.config?.method?.toUpperCase()} ${error.config?.url}`
+    // 토큰 갱신 API의 503 에러는 조용히 처리 (앱이 튕기지 않도록)
+    const isTokenRefreshRequest = error.config?.url?.includes(
+      '/users/me/access-token'
     );
-    console.error('에러 상태:', error.response?.status);
-    console.error('에러 데이터:', error.response?.data);
-    console.error('에러 메시지:', error.message);
+    const is503Error = error.response?.status === 503;
+
+    if (isTokenRefreshRequest && is503Error) {
+      // 503 에러는 조용히 처리하고 재시도하지 않음
+      console.log('⚠️ 토큰 갱신 API 일시적 오류 (503), 조용히 처리');
+      return Promise.reject(error);
+    }
+
+    // 에러 응답 로깅 (개발 환경에서만 상세 로그)
+    if (__DEV__) {
+      console.error(
+        `❌ API 에러: ${error.config?.method?.toUpperCase()} ${
+          error.config?.url
+        }`
+      );
+      console.error('에러 상태:', error.response?.status);
+      console.error('에러 데이터:', error.response?.data);
+      console.error('에러 메시지:', error.message);
+    } else {
+      // 프로덕션에서는 간단한 로그만
+      if (!is503Error) {
+        console.log(
+          `⚠️ API 오류: ${error.config?.url} (${
+            error.response?.status || '네트워크 오류'
+          })`
+        );
+      }
+    }
 
     // 구글 로그인 API 에러 특별 로깅
     if (
@@ -130,14 +156,32 @@ apiClient.interceptors.response.use(
             return apiClient(originalRequest);
           }
         } else {
-          // 토큰 갱신 실패 시 로그아웃 처리
-          console.log('❌ 토큰 갱신 실패, 로그아웃 처리');
-          await clearTokens();
-          // 로그인 화면으로 리다이렉트 (필요시)
+          // 토큰 갱신 실패 시 처리 (refreshAccessToken 내부에서 이미 503 에러는 조용히 처리됨)
+          // 503 에러가 아닌 경우에만 로그아웃 처리
+          console.log('⚠️ 토큰 갱신 실패 (일시적 오류일 수 있음)');
+          // 503 에러는 refreshAccessToken 내부에서 이미 조용히 처리되므로
+          // 여기서는 로그아웃하지 않고 조용히 실패 처리
         }
-      } catch (refreshError) {
-        console.error('❌ 토큰 갱신 중 에러:', refreshError);
-        await clearTokens();
+      } catch (refreshError: any) {
+        // 503 에러는 조용히 처리
+        const is503Error = refreshError?.response?.status === 503;
+        if (!is503Error) {
+          if (__DEV__) {
+            console.error('❌ 토큰 갱신 중 에러:', refreshError);
+          } else {
+            console.log('⚠️ 토큰 갱신 중 오류 발생');
+          }
+          // 503이 아닌 심각한 에러만 로그아웃 처리
+          // Push Token 삭제 (JWT 없어도 요청 가능)
+          try {
+            await unregisterPushToken();
+          } catch (error) {
+            console.log('⚠️ Push Token 삭제 실패 (무시):', error);
+          }
+          await clearTokens();
+        } else {
+          console.log('⚠️ 토큰 갱신 일시적 오류 (503), 조용히 처리');
+        }
       }
     }
 
@@ -163,7 +207,7 @@ export const signUp = async (data: SignUpRequest): Promise<SignUpResponse> => {
   try {
     console.log('🚀 회원가입 API 요청:', data);
     const response = await apiClient.post<SignUpResponse>(
-      '/api/auth/teaming/sign-up',
+      '/api/auth/teaming/sign-up?isMobile=true',
       data
     );
     console.log('✅ 회원가입 성공:', response.data);
@@ -189,7 +233,7 @@ export const login = async (data: LoginRequest): Promise<LoginResponse> => {
   try {
     console.log('🚀 로그인 API 요청:', data);
     const response = await apiClient.post<LoginResponse>(
-      '/api/auth/teaming/sign-in',
+      '/api/auth/teaming/sign-in?isMobile=true',
       data
     );
     console.log('✅ 로그인 성공:', response.data);
