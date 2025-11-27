@@ -210,7 +210,7 @@ export default function MyPageScreen() {
                 source={
                   avatarUrl
                     ? { uri: avatarUrl }
-                    : require('@/assets/images/tmlogo.png')
+                    : require('@/assets/images/teaminglogo.png')
                 }
                 style={styles.profileImage}
                 onError={() => {

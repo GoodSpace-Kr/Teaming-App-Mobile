@@ -102,11 +102,15 @@
       </dict>
     </array>
     <key>CFBundleVersion</key>
-    <string>37</string>
+    <string>48</string>
     <key>ITSAppUsesNonExemptEncryption</key>
     <false/>
     <key>KAKAO_APP_KEY</key>
     <string>bab0d232a194e56bd4920ba68c04e3e6</string>
+    <key>LSApplicationQueriesSchemes</key>
+    <array>
+      <string>kakaotalk</string>
+    </array>
     <key>LSMinimumSystemVersion</key>
     <string>12.0</string>
     <key>LSRequiresIPhoneOS</key>

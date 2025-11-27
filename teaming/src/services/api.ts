@@ -91,9 +91,11 @@ apiClient.interceptors.response.use(
     const originalRequest = error.config;
 
     // 토큰 갱신 API의 503 에러는 조용히 처리 (앱이 튕기지 않도록)
-    const isTokenRefreshRequest = error.config?.url?.includes('/users/me/access-token');
+    const isTokenRefreshRequest = error.config?.url?.includes(
+      '/users/me/access-token'
+    );
     const is503Error = error.response?.status === 503;
-    
+
     if (isTokenRefreshRequest && is503Error) {
       // 503 에러는 조용히 처리하고 재시도하지 않음
       console.log('⚠️ 토큰 갱신 API 일시적 오류 (503), 조용히 처리');
@@ -103,7 +105,9 @@ apiClient.interceptors.response.use(
     // 에러 응답 로깅 (개발 환경에서만 상세 로그)
     if (__DEV__) {
       console.error(
-        `❌ API 에러: ${error.config?.method?.toUpperCase()} ${error.config?.url}`
+        `❌ API 에러: ${error.config?.method?.toUpperCase()} ${
+          error.config?.url
+        }`
       );
       console.error('에러 상태:', error.response?.status);
       console.error('에러 데이터:', error.response?.data);
@@ -111,7 +115,11 @@ apiClient.interceptors.response.use(
     } else {
       // 프로덕션에서는 간단한 로그만
       if (!is503Error) {
-        console.log(`⚠️ API 오류: ${error.config?.url} (${error.response?.status || '네트워크 오류'})`);
+        console.log(
+          `⚠️ API 오류: ${error.config?.url} (${
+            error.response?.status || '네트워크 오류'
+          })`
+        );
       }
     }
 
@@ -199,7 +207,7 @@ export const signUp = async (data: SignUpRequest): Promise<SignUpResponse> => {
   try {
     console.log('🚀 회원가입 API 요청:', data);
     const response = await apiClient.post<SignUpResponse>(
-      '/api/auth/teaming/sign-up',
+      '/api/auth/teaming/sign-up?isMobile=true',
       data
     );
     console.log('✅ 회원가입 성공:', response.data);
@@ -225,7 +233,7 @@ export const login = async (data: LoginRequest): Promise<LoginResponse> => {
   try {
     console.log('🚀 로그인 API 요청:', data);
     const response = await apiClient.post<LoginResponse>(
-      '/api/auth/teaming/sign-in',
+      '/api/auth/teaming/sign-in?isMobile=true',
       data
     );
     console.log('✅ 로그인 성공:', response.data);

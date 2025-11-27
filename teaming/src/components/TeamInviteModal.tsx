@@ -34,10 +34,12 @@ export default function TeamInviteModal({
   inviteCode,
   roomId,
 }: TeamInviteModalProps) {
-  const [copied, setCopied] = useState(false);
+  // TODO: 앱 스토어 배포 후 구현 예정
+  // const [copied, setCopied] = useState(false);
 
   // 초대 링크 생성 (실제 앱 스토어 링크로 변경 예정)
-  const inviteLink = `https://teaming.app/join/${inviteCode}`;
+  // TODO: 앱 스토어 배포 후 구현 예정
+  // const inviteLink = `https://teaming.app/join/${inviteCode}`;
 
   // roomId 로깅 (디버깅용)
   useEffect(() => {
@@ -47,34 +49,36 @@ export default function TeamInviteModal({
   }, [roomId]);
 
   // 링크 복사
-  const handleCopyLink = async () => {
-    try {
-      await Clipboard.setStringAsync(inviteLink);
-      setCopied(true);
-      Alert.alert('복사 완료', '초대 링크가 클립보드에 복사되었습니다.');
+  // TODO: 앱 스토어 배포 후 구현 예정
+  // const handleCopyLink = async () => {
+  //   try {
+  //     await Clipboard.setStringAsync(inviteLink);
+  //     setCopied(true);
+  //     Alert.alert('복사 완료', '초대 링크가 클립보드에 복사되었습니다.');
 
-      // 2초 후 복사 상태 초기화
-      setTimeout(() => setCopied(false), 2000);
-    } catch (error) {
-      console.error('복사 실패:', error);
-      Alert.alert('오류', '링크 복사에 실패했습니다.');
-    }
-  };
+  //     // 2초 후 복사 상태 초기화
+  //     setTimeout(() => setCopied(false), 2000);
+  //   } catch (error) {
+  //     console.error('복사 실패:', error);
+  //     Alert.alert('오류', '링크 복사에 실패했습니다.');
+  //   }
+  // };
 
   // 카카오톡 공유
-  const handleKakaoShare = async () => {
-    try {
-      const shareMessage = `🎉 ${teamName} 팀에 초대받았습니다!\n\n초대 코드: ${inviteCode}\n\n링크: ${inviteLink}`;
+  // TODO: 앱 스토어 배포 후 구현 예정
+  // const handleKakaoShare = async () => {
+  //   try {
+  //     const shareMessage = `🎉 ${teamName} 팀에 초대받았습니다!\n\n초대 코드: ${inviteCode}\n\n링크: ${inviteLink}`;
 
-      await Share.share({
-        message: shareMessage,
-        title: `${teamName} 팀 초대`,
-      });
-    } catch (error) {
-      console.error('카카오톡 공유 실패:', error);
-      Alert.alert('오류', '공유에 실패했습니다.');
-    }
-  };
+  //     await Share.share({
+  //       message: shareMessage,
+  //       title: `${teamName} 팀 초대`,
+  //     });
+  //   } catch (error) {
+  //     console.error('카카오톡 공유 실패:', error);
+  //     Alert.alert('오류', '공유에 실패했습니다.');
+  //   }
+  // };
 
   // 채팅방 입장
   const handleEnterRoom = () => {
@@ -128,7 +132,8 @@ export default function TeamInviteModal({
           </View>
 
           {/* 초대 링크 */}
-          <View style={styles.inviteLinkSection}>
+          {/* TODO: 앱 스토어 배포 후 구현 예정 */}
+          {/* <View style={styles.inviteLinkSection}>
             <Text style={styles.sectionTitle}>초대 링크</Text>
             <View style={styles.linkContainer}>
               <Text style={styles.inviteLink} numberOfLines={2}>
@@ -158,13 +163,13 @@ export default function TeamInviteModal({
                 </TouchableOpacity>
               </View>
             </View>
-          </View>
+          </View> */}
 
           {/* 안내 메시지 */}
           <View style={styles.infoSection}>
             <Ionicons name="information-circle" size={20} color="#4A90E2" />
             <Text style={styles.infoText}>
-              초대 코드나 링크를 팀원들에게 공유하면{'\n'}
+              초대 코드를 팀원들에게 공유하면{'\n'}
               팀에 참여할 수 있습니다.
             </Text>
           </View>

@@ -252,11 +252,7 @@ export default function LoginScreen() {
         <View style={styles.buttonSection}>
           <TouchableOpacity
             style={[styles.loginButton, { opacity: isLoading ? 0.7 : 1 }]}
-            onPress={() => {
-              console.log('로그인 버튼 눌림');
-              Alert.alert('로그인 버튼 눌림');
-              handleLogin();
-            }}
+            onPress={handleLogin}
             disabled={isLoading}
           >
             {isLoading ? (
@@ -268,11 +264,7 @@ export default function LoginScreen() {
 
           <TouchableOpacity
             style={styles.registerButton}
-            onPress={() => {
-              console.log('회원가입 버튼 눌림');
-              Alert.alert('회원가입 버튼 눌림');
-              handleRegister();
-            }}
+            onPress={handleRegister}
           >
             <Text style={styles.registerButtonText}>회원가입</Text>
           </TouchableOpacity>
